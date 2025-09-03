@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tracing::{error, info};
 
 #[derive(Parser, Debug)]
@@ -67,21 +67,9 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
         };
         info!("Accepted connection from {}", socket_addr);
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(socket).await {
+            if let Err(e) = rhoxy_socks::handle_connection(socket).await {
                 error!("Connection error for {}: {}", socket_addr, e);
             }
         });
     }
-}
-
-/// Should be organized into these steps:
-/// 1. Handle authentication negotation
-/// 2. Handle client request (command + destination addr)
-/// 2.1 Handle connect request
-/// 2.2 Handle bind request
-/// 2.3 Handle UDP associate request
-
-async fn handle_connection(socket: TcpStream) -> io::Result<()> {
-    // TODO: implement connection handling
-    Ok(())
 }
