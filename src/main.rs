@@ -29,8 +29,16 @@ async fn main() {
             .init();
 }
 
-async fn start_server(args: Args) {
-    let server_addr = format!("{}:{}", args.host, args.port);
+    let server_addr = format!("{}:{}", args.host, args.port)
+        .to_socket_addrs()
+        .expect("Failed to parse server address")
+        .next()
+        .expect("No addresses found");
+
+    start_server(server_addr).await;
+}
+
+async fn start_server(server_addr: SocketAddr) {
     info!("Starting server on {}", server_addr);
     let listener = TcpListener::bind(&server_addr)
         .await
