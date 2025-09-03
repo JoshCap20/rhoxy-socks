@@ -22,7 +22,7 @@ pub async fn handle_connection(stream: TcpStream, client_addr: SocketAddr) -> io
     connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
 
     // 2. handle request
-    connection::request::handle_request(reader, writer, client_addr).await?;
+    connection::request::handle_request(&mut reader, &mut writer, client_addr).await?;
 
     Ok(())
 }

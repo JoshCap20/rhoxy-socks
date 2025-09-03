@@ -7,8 +7,8 @@ use tokio::{
 use tracing::{debug, error};
 
 pub async fn handle_request(
-    mut reader: BufReader<OwnedReadHalf>,
-    mut writer: BufWriter<OwnedWriteHalf>,
+    reader: &mut BufReader<OwnedReadHalf>,
+    writer: &mut BufWriter<OwnedWriteHalf>,
     client_addr: SocketAddr,
 ) -> io::Result<()> {
 ///    The SOCKS request is formed as follows:
