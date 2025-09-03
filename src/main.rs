@@ -29,7 +29,9 @@ async fn main() {
 }
 
 async fn start_server(args: Args) {
-    let listener = TcpListener::bind(format!("{}:{}", args.host, args.port))
+    let server_addr = format!("{}:{}", args.host, args.port);
+    info!("Starting server on {}", server_addr);
+    let listener = TcpListener::bind(&server_addr)
         .await
         .expect("Failed to bind to address");
 
