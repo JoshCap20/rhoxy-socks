@@ -1,6 +1,6 @@
 use clap::Parser;
 use tokio::net::{TcpListener, TcpStream};
-use tracing::info;
+use tracing::{error, info};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::io;
 
@@ -21,19 +21,24 @@ struct Args {
 async fn main() -> io::Result<()>{
     let args = Args::parse();
 
-        tracing_subscriber::fmt()
+    tracing_subscriber::fmt()
         .with_max_level(if args.verbose {
             tracing::Level::DEBUG
-    } else {
+        } else {
             tracing::Level::INFO
         })
-            .init();
+        .init();
 
-    let server_addr = format!("{}:{}", args.host, args.port)
-        .to_socket_addrs()
-        .expect("Failed to parse server address")
-        .next()
-        .expect("No addresses found");
+    let server_addr = format!("{}:{}", args.host, args.port);
+    let server_addr = match server_addr.to_socket_addrs() {
+        Ok(mut addrs) => addrs
+            .next()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "No valid socket address found"))?,
+        Err(e) => {
+            error!("Failed to resolve address {}: {}", server_addr, e);
+            return Err(e);
+        }
+    };
 
     start_server(server_addr).await?;
     Ok(())
@@ -41,17 +46,31 @@ async fn main() -> io::Result<()>{
 
 async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
     info!("Starting server on {}", server_addr.to_string());
-    let listener = TcpListener::bind(&server_addr)
-        .await
-        .expect("Failed to bind to address");
+    let listener = match TcpListener::bind(&server_addr).await {
+        Ok(listener) => {
+            info!("Server listening on {}", server_addr);
+            listener
+        },
+        Err(e) => {
+            error!("Failed to bind to {}: {}", server_addr, e);
+            return Err(e);
+        }
+    };
 
     loop {
-        let (socket, socket_addr) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection");
+        let (socket, socket_addr) = match listener.accept().await {
+            Ok(result) => result,
+            Err(e) => {
+                error!("Failed to accept connection: {}", e);
+                continue;
+            }
+        };
         info!("Accepted connection from {}", socket_addr);
-        tokio::spawn(handle_connection(socket));
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(socket).await {
+                error!("Connection error for {}: {}", socket_addr, e);
+            }
+        });
     }
 }
 
