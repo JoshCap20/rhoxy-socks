@@ -5,27 +5,26 @@ use tokio::{
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
 use tracing::debug;
-
-struct HandshakeRequest {
-    version: u8,
-    nmethods: u8,
-    methods: Vec<u8>,
+pub struct HandshakeRequest {
+    pub version: u8,
+    pub nmethods: u8,
+    pub methods: Vec<u8>,
 }
 
 pub async fn perform_handshake(
-    mut reader: BufReader<OwnedReadHalf>,
-    mut writer: BufWriter<OwnedWriteHalf>,
+    reader: &mut BufReader<OwnedReadHalf>,
+    writer: &mut BufWriter<OwnedWriteHalf>,
     client_addr: SocketAddr,
 ) -> io::Result<()> {
     debug!("Performing handshake for client {}", client_addr);
 
     let handshake_request = parse_client_greeting(reader, client_addr).await?;
-    let handshake_response = handle_client_greeting(handshake_request, writer, client_addr).await?;
+    handle_client_greeting(&handshake_request, writer, client_addr).await?;
     Ok(())
 }
 
 async fn parse_client_greeting(
-    mut reader: BufReader<OwnedReadHalf>,
+    reader: &mut BufReader<OwnedReadHalf>,
     client_addr: SocketAddr,
 ) -> io::Result<HandshakeRequest> {
     debug!("Parsing client greeting for {}", client_addr);
@@ -53,8 +52,8 @@ async fn parse_client_greeting(
 }
 
 async fn handle_client_greeting(
-    handshake_request: HandshakeRequest,
-    mut writer: BufWriter<OwnedWriteHalf>,
+    handshake_request: &HandshakeRequest,
+    writer: &mut BufWriter<OwnedWriteHalf>,
     client_addr: SocketAddr,
 ) -> io::Result<()> {
     /// TODO: Support all authentication methods
