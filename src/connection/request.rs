@@ -1,8 +1,12 @@
 use std::{io, net::SocketAddr};
 
+use tokio::join;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, copy},
+    net::{
+        TcpStream,
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+    },
 };
 use tracing::{debug, error};
 
@@ -18,12 +22,16 @@ pub struct SocksRequest {
     pub dest_port: u16,
 }
 
+const RESERVED: u8 = 0x00;
+
 const CONNECT: u8 = 0x01;
 const BIND: u8 = 0x02;
 const UDP_ASSOCIATE: u8 = 0x03;
 const ATYP_IPV4: u8 = 0x01;
 const ATYP_DOMAIN: u8 = 0x03;
 const ATYP_IPV6: u8 = 0x04;
+
+const CONNECTION_SUCCESS_REPLY: u8 = 0x00;
 
 pub async fn handle_request(
     reader: &mut BufReader<OwnedReadHalf>,
@@ -38,7 +46,7 @@ pub async fn handle_request(
         client_addr, client_request
     );
 
-    handle_client_request(client_request, writer).await?;
+    handle_client_request(client_request, reader, writer).await?;
 
     Ok(())
 }
@@ -55,7 +63,7 @@ async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<Sock
 
     let command = reader.read_u8().await?;
     let reserved = reader.read_u8().await?;
-    if reserved != 0x00 {
+    if reserved != RESERVED {
         error!("Invalid reserved byte: {}", reserved);
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -104,11 +112,12 @@ async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<Sock
 
 async fn handle_client_request(
     client_request: SocksRequest,
+    reader: &mut BufReader<OwnedReadHalf>,
     writer: &mut BufWriter<OwnedWriteHalf>,
 ) -> io::Result<()> {
     match client_request.command {
         CONNECT => {
-            debug!("Handling CONNECT request");
+            handle_connect_command(client_request, reader, writer).await?;
         }
         BIND => {
             debug!("Handling BIND request");
@@ -124,6 +133,64 @@ async fn handle_client_request(
             ));
         }
     }
+
+    Ok(())
+}
+
+async fn handle_connect_command(
+    client_request: SocksRequest,
+    client_reader: &mut BufReader<OwnedReadHalf>,
+    client_writer: &mut BufWriter<OwnedWriteHalf>,
+) -> io::Result<()> {
+    debug!("Handling CONNECT command");
+
+    let target_stream = match TcpStream::connect(format!(
+        "{}:{}",
+        client_request.dest_addr, client_request.dest_port
+    ))
+    .await
+    {
+        Ok(stream) => stream,
+        Err(e) => {
+            error!("Failed to connect to {}: {}", client_request.dest_addr, e);
+            return Err(e.into());
+        }
+    };
+    debug!("Connected to target {}", client_request.dest_addr);
+
+    let destination_addr = target_stream.local_addr().unwrap();
+    let destination_port = destination_addr.port();
+    let destination_addr_type = if destination_addr.is_ipv4() {
+        ATYP_IPV4
+    } else {
+        ATYP_IPV6
+    };
+    let destination_addr_as_bytes = match destination_addr.ip() {
+        std::net::IpAddr::V4(addr) => addr.octets().to_vec(),
+        std::net::IpAddr::V6(addr) => addr.octets().to_vec(),
+    };
+    debug!(
+        "Connected to destination {}:{} address type {}",
+        destination_addr, destination_port, destination_addr_type
+    );
+
+    client_writer.write_u8(SOCKS5_VERSION).await?;
+    client_writer.write_u8(CONNECTION_SUCCESS_REPLY).await?;
+    client_writer.write_u8(RESERVED).await?;
+    client_writer.write_u8(destination_addr_type).await?;
+    client_writer.write_all(&destination_addr_as_bytes).await?;
+    client_writer.write_u16(destination_port).await?;
+    client_writer.flush().await?;
+
+    let (mut target_reader, mut target_writer) = target_stream.into_split();
+
+    let (client_to_target, target_to_client) = join!(
+        copy(&mut *client_reader, &mut target_writer),
+        copy(&mut target_reader, &mut *client_writer)
+    );
+
+    client_to_target?;
+    target_to_client?;
 
     Ok(())
 }
