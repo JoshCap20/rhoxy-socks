@@ -77,5 +77,9 @@ async fn handle_handshake(
     let nmethods = reader.read_u8().await?;
     debug!("Client {} is using SOCKS version {} with {} methods", client_addr, version, nmethods);
 
+    let mut methods: Vec<u8> = vec![0; nmethods as usize];
+    reader.read_exact(&mut methods).await?;
+    debug!("Client {} supports the following authentication methods: {:?}", client_addr, methods);
+
     Ok(())
 }
