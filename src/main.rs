@@ -20,15 +20,13 @@ struct Args {
 async fn main() {
     let args = Args::parse();
 
-    if args.verbose {
         tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .init();
+        .with_max_level(if args.verbose {
+            tracing::Level::DEBUG
     } else {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::INFO)
+            tracing::Level::INFO
+        })
             .init();
-    }
 
     let server_addr = format!("{}:{}", args.host, args.port)
         .to_socket_addrs()
@@ -61,6 +59,7 @@ async fn start_server(server_addr: SocketAddr) {
 /// 2.1 Handle connect request
 /// 2.2 Handle bind request
 /// 2.3 Handle UDP associate request
+
 async fn handle_connection(socket: TcpStream) {
     // TODO: implement connection handling
 }
