@@ -4,7 +4,9 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
-use tracing::debug;
+use tracing::{debug, error};
+
+use crate::connection::SOCKS5_VERSION;
 
 #[derive(Debug)]
 pub struct HandshakeRequest {
@@ -12,6 +14,8 @@ pub struct HandshakeRequest {
     pub nmethods: u8,
     pub methods: Vec<u8>,
 }
+
+const NO_AUTHENTICATION_REQUIRED: u8 = 0x00;
 
 pub async fn perform_handshake(
     reader: &mut BufReader<OwnedReadHalf>,
@@ -36,7 +40,13 @@ async fn parse_client_greeting(
     reader: &mut BufReader<OwnedReadHalf>,
 ) -> io::Result<HandshakeRequest> {
     let version = reader.read_u8().await?;
-    // TODO: Validate socks 5
+    if version != SOCKS5_VERSION {
+        error!("Invalid SOCKS version: {}", version);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
+        ));
+    }
     let nmethods = reader.read_u8().await?;
 
     let mut methods: Vec<u8> = vec![0; nmethods as usize];
@@ -59,7 +69,7 @@ async fn handle_client_greeting(
     ///           o  X'03' to X'7F' IANA ASSIGNED
     ///           o  X'80' to X'FE' RESERVED FOR PRIVATE METHODS
     ///           o  X'FF' NO ACCEPTABLE METHODS
-    let response = [0x05, 0x00];
+    let response = [SOCKS5_VERSION, NO_AUTHENTICATION_REQUIRED];
     writer.write_all(&response).await?;
     writer.flush().await?;
 

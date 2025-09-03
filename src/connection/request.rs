@@ -6,6 +6,8 @@ use tokio::{
 };
 use tracing::{debug, error};
 
+use crate::connection::SOCKS5_VERSION;
+
 #[derive(Debug)]
 pub struct SocksRequest {
     pub version: u8,
@@ -16,7 +18,6 @@ pub struct SocksRequest {
     pub dest_port: u16,
 }
 
-const SOCKS5_VERSION: u8 = 0x05;
 const CONNECT: u8 = 0x01;
 const BIND: u8 = 0x02;
 const UDP_ASSOCIATE: u8 = 0x03;
