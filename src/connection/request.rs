@@ -31,7 +31,7 @@ const ATYP_IPV4: u8 = 0x01;
 const ATYP_DOMAIN: u8 = 0x03;
 const ATYP_IPV6: u8 = 0x04;
 
-const CONNECTION_SUCCESS_REPLY: u8 = 0x00;
+const REPLY_SUCCESS: u8 = 0x00;
 
 pub async fn handle_request(
     reader: &mut BufReader<OwnedReadHalf>,
@@ -118,12 +118,15 @@ async fn handle_client_request(
     match client_request.command {
         CONNECT => {
             handle_connect_command(client_request, reader, writer).await?;
+            Ok(())
         }
         BIND => {
             debug!("Handling BIND request");
+            Ok(())
         }
         UDP_ASSOCIATE => {
             debug!("Handling UDP ASSOCIATE request");
+            Ok(())
         }
         _ => {
             error!("Unsupported command: {}", client_request.command);
@@ -133,8 +136,6 @@ async fn handle_client_request(
             ));
         }
     }
-
-    Ok(())
 }
 
 async fn handle_connect_command(
@@ -144,21 +145,11 @@ async fn handle_connect_command(
 ) -> io::Result<()> {
     debug!("Handling CONNECT command");
 
-    let target_stream = match TcpStream::connect(format!(
-        "{}:{}",
-        client_request.dest_addr, client_request.dest_port
-    ))
-    .await
-    {
-        Ok(stream) => stream,
-        Err(e) => {
-            error!("Failed to connect to {}: {}", client_request.dest_addr, e);
-            return Err(e.into());
-        }
-    };
+    let target_stream =
+        TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await?;
     debug!("Connected to target {}", client_request.dest_addr);
 
-    let destination_addr = target_stream.local_addr().unwrap();
+    let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
     let destination_addr_type = if destination_addr.is_ipv4() {
         ATYP_IPV4
@@ -174,16 +165,16 @@ async fn handle_connect_command(
         destination_addr, destination_port, destination_addr_type
     );
 
-    client_writer.write_u8(SOCKS5_VERSION).await?;
-    client_writer.write_u8(CONNECTION_SUCCESS_REPLY).await?;
-    client_writer.write_u8(RESERVED).await?;
-    client_writer.write_u8(destination_addr_type).await?;
-    client_writer.write_all(&destination_addr_as_bytes).await?;
-    client_writer.write_u16(destination_port).await?;
-    client_writer.flush().await?;
+    send_reply(
+        client_writer,
+        REPLY_SUCCESS,
+        destination_addr_type,
+        &destination_addr_as_bytes,
+        destination_port,
+    )
+    .await?;
 
     let (mut target_reader, mut target_writer) = target_stream.into_split();
-
     let (client_to_target, target_to_client) = join!(
         copy(&mut *client_reader, &mut target_writer),
         copy(&mut target_reader, &mut *client_writer)
@@ -191,6 +182,22 @@ async fn handle_connect_command(
 
     client_to_target?;
     target_to_client?;
+    Ok(())
+}
 
+async fn send_reply(
+    writer: &mut BufWriter<OwnedWriteHalf>,
+    reply_code: u8,
+    addr_type: u8,
+    addr_bytes: &[u8],
+    port: u16,
+) -> io::Result<()> {
+    writer.write_u8(SOCKS5_VERSION).await?;
+    writer.write_u8(reply_code).await?;
+    writer.write_u8(RESERVED).await?;
+    writer.write_u8(addr_type).await?;
+    writer.write_all(addr_bytes).await?;
+    writer.write_u16(port).await?;
+    writer.flush().await?;
     Ok(())
 }
