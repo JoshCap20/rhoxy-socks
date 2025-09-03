@@ -46,7 +46,7 @@ pub async fn handle_request(
         client_addr, client_request
     );
 
-    handle_client_request(client_request, reader, writer).await?;
+    handle_client_request(client_request, client_addr, reader, writer).await?;
 
     Ok(())
 }
@@ -112,23 +112,24 @@ async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<Sock
 
 async fn handle_client_request(
     client_request: SocksRequest,
+    client_addr: SocketAddr,
     reader: &mut BufReader<OwnedReadHalf>,
     writer: &mut BufWriter<OwnedWriteHalf>,
 ) -> io::Result<()> {
     match client_request.command {
         CONNECT => {
-            handle_connect_command(client_request, reader, writer).await?;
+            handle_connect_command(client_request, client_addr, reader, writer).await?;
             Ok(())
         }
         BIND => {
-            debug!("Handling BIND request");
+            // TODO
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "BIND request handling not implemented",
             ))
         }
         UDP_ASSOCIATE => {
-            debug!("Handling UDP ASSOCIATE request");
+            // TODO
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "UDP ASSOCIATE request handling not implemented",
@@ -146,14 +147,21 @@ async fn handle_client_request(
 
 async fn handle_connect_command(
     client_request: SocksRequest,
+    client_addr: SocketAddr,
     client_reader: &mut BufReader<OwnedReadHalf>,
     client_writer: &mut BufWriter<OwnedWriteHalf>,
 ) -> io::Result<()> {
-    debug!("Handling CONNECT command");
+    debug!(
+        "[{client_addr}] Handling CONNECT request: {:?}",
+        client_request
+    );
 
     let target_stream =
         TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await?;
-    debug!("Connected to target {}", client_request.dest_addr);
+    debug!(
+        "[{client_addr}] Connected to target {}:{}",
+        client_request.dest_addr, client_request.dest_port
+    );
 
     let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
@@ -166,10 +174,6 @@ async fn handle_connect_command(
         std::net::IpAddr::V4(addr) => addr.octets().to_vec(),
         std::net::IpAddr::V6(addr) => addr.octets().to_vec(),
     };
-    debug!(
-        "Connected to destination {}:{} address type {}",
-        destination_addr, destination_port, destination_addr_type
-    );
 
     send_reply(
         client_writer,
