@@ -2,7 +2,7 @@ use clap::Parser;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -65,7 +65,7 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
                 continue;
             }
         };
-        info!("Accepted connection from {}", socket_addr);
+        debug!("Accepted connection from {}", socket_addr);
         tokio::spawn(async move {
             if let Err(e) = rhoxy_socks::handle_connection(socket, socket_addr).await {
                 error!("Connection error for {}: {}", socket_addr, e);

@@ -4,8 +4,10 @@ use std::io;
 use std::net::SocketAddr;
 use tokio::io::{BufReader, BufWriter};
 use tokio::net::TcpStream;
+use tracing::debug;
 
 pub async fn handle_connection(stream: TcpStream, client_addr: SocketAddr) -> io::Result<()> {
+    debug!("Handling connection from {}", client_addr);
     let (reader, writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
     let mut writer = BufWriter::new(writer);
