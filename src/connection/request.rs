@@ -122,11 +122,17 @@ async fn handle_client_request(
         }
         BIND => {
             debug!("Handling BIND request");
-            Ok(())
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "BIND request handling not implemented",
+            ))
         }
         UDP_ASSOCIATE => {
             debug!("Handling UDP ASSOCIATE request");
-            Ok(())
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "UDP ASSOCIATE request handling not implemented",
+            ))
         }
         _ => {
             error!("Unsupported command: {}", client_request.command);
