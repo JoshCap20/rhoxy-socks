@@ -1,5 +1,6 @@
 use clap::Parser;
 use tokio::net::{TcpListener, TcpStream};
+use tracing::info;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -33,10 +34,11 @@ async fn start_server(args: Args) {
         .expect("Failed to bind to address");
 
     loop {
-        let (socket, _) = listener
+        let (socket, socket_addr) = listener
             .accept()
             .await
             .expect("Failed to accept connection");
+        info!("Accepted connection from {}", socket_addr);
         tokio::spawn(handle_connection(socket));
     }
 }
