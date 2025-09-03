@@ -2,6 +2,7 @@ use clap::Parser;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::info;
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::io;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -17,7 +18,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()>{
     let args = Args::parse();
 
         tracing_subscriber::fmt()
@@ -34,11 +35,12 @@ async fn main() {
         .next()
         .expect("No addresses found");
 
-    start_server(server_addr).await;
+    start_server(server_addr).await?;
+    Ok(())
 }
 
-async fn start_server(server_addr: SocketAddr) {
-    info!("Starting server on {}", server_addr);
+async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
+    info!("Starting server on {}", server_addr.to_string());
     let listener = TcpListener::bind(&server_addr)
         .await
         .expect("Failed to bind to address");
@@ -60,6 +62,7 @@ async fn start_server(server_addr: SocketAddr) {
 /// 2.2 Handle bind request
 /// 2.3 Handle UDP associate request
 
-async fn handle_connection(socket: TcpStream) {
+async fn handle_connection(socket: TcpStream) -> io::Result<()> {
     // TODO: implement connection handling
+    Ok(())
 }
