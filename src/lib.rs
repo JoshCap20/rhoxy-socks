@@ -18,8 +18,11 @@ pub async fn handle_connection(stream: TcpStream, client_addr: SocketAddr) -> io
     let mut reader = BufReader::new(reader);
     let mut writer = BufWriter::new(writer);
 
-    // 1. handle initial request
+    // 1. handle handshake
     connection::handshake::perform_handshake(reader, writer, client_addr).await?;
+
+    // 2. handle request
+    connection::request::handle_request(reader, writer, client_addr).await?;
 
     Ok(())
 }

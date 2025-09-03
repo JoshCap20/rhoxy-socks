@@ -21,7 +21,6 @@ pub async fn perform_handshake(
 
     let handshake_request = parse_client_greeting(reader, client_addr).await?;
     let handshake_response = handle_client_greeting(handshake_request, writer, client_addr).await?;
-
     Ok(())
 }
 
