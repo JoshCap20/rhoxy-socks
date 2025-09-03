@@ -323,8 +323,8 @@ mod tests {
             .write_all(&[
                 0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
                 0x0B, // Domain length (11)
-                b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm',
-                0x00, 0x50, // Port 80
+                b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', 0x00,
+                0x50, // Port 80
             ])
             .await
             .unwrap();
@@ -335,7 +335,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::Unsupported);
-        assert!(err.to_string().contains("Domain name resolution not implemented"));
+        assert!(
+            err.to_string()
+                .contains("Domain name resolution not implemented")
+        );
     }
 
     #[tokio::test]
@@ -557,7 +560,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_reply_error_codes() {
         let error_codes = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-        
+
         for &error_code in &error_codes {
             let (server, mut client) = tokio::io::duplex(1024);
             let mut writer = BufWriter::new(server);

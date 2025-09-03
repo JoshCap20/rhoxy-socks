@@ -154,7 +154,10 @@ mod tests {
     #[tokio::test]
     async fn test_parse_client_greeting_multiple_methods() {
         let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x05, 0x03, 0x00, 0x01, 0x02]).await.unwrap();
+        client
+            .write_all(&[0x05, 0x03, 0x00, 0x01, 0x02])
+            .await
+            .unwrap();
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);

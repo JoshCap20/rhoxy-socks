@@ -306,7 +306,7 @@ async fn test_unsupported_bind_command() {
     // Should get connection closed or error reply
     let mut reply = vec![0u8; 10];
     let result = timeout(Duration::from_secs(2), client.read_exact(&mut reply)).await;
-    
+
     match result {
         Ok(Ok(_)) => {
             // Got a reply - should be an error code
@@ -350,7 +350,7 @@ async fn test_unsupported_udp_associate_command() {
     // Should get connection closed or error reply
     let mut reply = vec![0u8; 10];
     let result = timeout(Duration::from_secs(2), client.read_exact(&mut reply)).await;
-    
+
     match result {
         Ok(Ok(_)) => {
             assert_eq!(reply[0], SOCKS5_VERSION);
@@ -380,7 +380,7 @@ async fn test_malformed_handshake_too_few_bytes() {
     client.write_all(&[0x05, 0x01]).await.unwrap();
     client.flush().await.unwrap();
     drop(client);
-    
+
     socks_handle.await.unwrap();
 }
 
@@ -412,7 +412,7 @@ async fn test_malformed_request_invalid_address_type() {
     // Should get error or connection close
     let mut reply = vec![0u8; 10];
     let result = timeout(Duration::from_secs(2), client.read_exact(&mut reply)).await;
-    
+
     match result {
         Ok(Ok(_)) => {
             assert_eq!(reply[0], SOCKS5_VERSION);
@@ -442,7 +442,7 @@ async fn test_invalid_socks_version_in_handshake() {
     client.write_all(&[0x04, 0x01, 0x00]).await.unwrap();
     client.flush().await.unwrap();
     drop(client);
-    
+
     socks_handle.await.unwrap();
 }
 
@@ -474,7 +474,7 @@ async fn test_invalid_socks_version_in_request() {
     // Should get error or connection close
     let mut reply = vec![0u8; 10];
     let result = timeout(Duration::from_secs(2), client.read_exact(&mut reply)).await;
-    
+
     match result {
         Ok(Ok(_)) => {
             assert_eq!(reply[0], SOCKS5_VERSION);
@@ -511,7 +511,7 @@ async fn test_client_disconnect_during_request() {
     // Send partial request then disconnect
     client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
     drop(client); // Disconnect before sending complete request
-    
+
     socks_handle.await.unwrap();
 }
 
@@ -560,7 +560,7 @@ async fn test_zero_byte_transfer() {
     // Try to read from connection - should close quickly
     let mut buf = [0u8; 1];
     let result = timeout(Duration::from_secs(2), client.read(&mut buf)).await;
-    
+
     match result {
         Ok(Ok(0)) => {
             // Connection closed as expected
