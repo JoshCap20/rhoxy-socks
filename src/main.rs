@@ -10,7 +10,7 @@ struct Args {
     #[arg(long, default_value = "localhost")]
     host: String,
 
-    #[arg(short, long, default_value = "8080", help = "Port to listen on")]
+    #[arg(short, long, default_value = "1080", help = "Port to listen on")]
     port: u16,
 
     #[arg(long, help = "Enable debug logging")]
