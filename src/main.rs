@@ -1,8 +1,8 @@
 use clap::Parser;
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
-use std::net::{SocketAddr, ToSocketAddrs};
-use std::io;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -18,7 +18,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()>{
+async fn main() -> io::Result<()> {
     let args = Args::parse();
 
     tracing_subscriber::fmt()
@@ -31,9 +31,9 @@ async fn main() -> io::Result<()>{
 
     let server_addr = format!("{}:{}", args.host, args.port);
     let server_addr = match server_addr.to_socket_addrs() {
-        Ok(mut addrs) => addrs
-            .next()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "No valid socket address found"))?,
+        Ok(mut addrs) => addrs.next().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "No valid socket address found")
+        })?,
         Err(e) => {
             error!("Failed to resolve address {}: {}", server_addr, e);
             return Err(e);
@@ -50,7 +50,7 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
         Ok(listener) => {
             info!("Server listening on {}", server_addr);
             listener
-        },
+        }
         Err(e) => {
             error!("Failed to bind to {}: {}", server_addr, e);
             return Err(e);
