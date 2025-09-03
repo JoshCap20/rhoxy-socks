@@ -20,12 +20,13 @@ async fn main() {
     let args = Args::parse();
 
     if args.verbose {
-        // TODO: init tracing subscriber with debug level
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .init();
     } else {
-        // TODO: init tracing subscriber with info level
-    }
-
-    start_server(args).await;
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .init();
 }
 
 async fn start_server(args: Args) {
@@ -45,6 +46,12 @@ async fn start_server(args: Args) {
     }
 }
 
+/// Should be organized into these steps:
+/// 1. Handle authentication negotation
+/// 2. Handle client request (command + destination addr)
+/// 2.1 Handle connect request
+/// 2.2 Handle bind request
+/// 2.3 Handle UDP associate request
 async fn handle_connection(socket: TcpStream) {
     // TODO: implement connection handling
 }
