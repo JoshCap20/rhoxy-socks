@@ -1,11 +1,12 @@
 use clap::Parser;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::info;
+use std::net::{SocketAddr, ToSocketAddrs};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "localhost")]
+    #[arg(long, default_value = "localhost")]
     host: String,
 
     #[arg(short, long, default_value = "8080", help = "Port to listen on")]
@@ -27,7 +28,7 @@ async fn main() {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::INFO)
             .init();
-}
+    }
 
     let server_addr = format!("{}:{}", args.host, args.port)
         .to_socket_addrs()
