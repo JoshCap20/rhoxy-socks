@@ -4,7 +4,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
-use tracing::debug;
+use tracing::{debug, error};
 
 pub async fn handle_request(
     mut reader: BufReader<OwnedReadHalf>,
@@ -44,6 +44,33 @@ pub async fn handle_request(
         client_addr, version, command, reserved, address_type
     );
 
-    // TODO: Handle different address types and commands
+    let dest_addr = match address_type {
+        1 => {
+            // IPv4
+            let mut addr = [0u8; 4];
+            reader.read_exact(&mut addr).await?;
+            std::net::IpAddr::from(addr)
+        }
+        3 => {
+            error!("Domain name address type not yet supported");
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Domain name resolution not implemented",
+            ));
+        }
+        4 => {
+            // IPv6
+            let mut addr = [0u8; 16];
+            reader.read_exact(&mut addr).await?;
+            std::net::IpAddr::from(addr)
+        }
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Unsupported address type",
+            ));
+        }
+    };
+    let dest_port = reader.read_u16().await?;
     Ok(())
 }
