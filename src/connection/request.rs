@@ -1,12 +1,10 @@
 use std::{io, net::SocketAddr};
 
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::join;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, copy},
-    net::{
-        TcpStream,
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-    },
+    net::TcpStream,
 };
 use tracing::{debug, error};
 
@@ -33,11 +31,15 @@ const ATYP_IPV6: u8 = 0x04;
 
 const REPLY_SUCCESS: u8 = 0x00;
 
-pub async fn handle_request(
-    reader: &mut BufReader<OwnedReadHalf>,
-    writer: &mut BufWriter<OwnedWriteHalf>,
+pub async fn handle_request<R, W>(
+    reader: &mut BufReader<R>,
+    writer: &mut BufWriter<W>,
     client_addr: SocketAddr,
-) -> io::Result<()> {
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     debug!("Handling request from {}", client_addr);
 
     let client_request = parse_request(reader).await?;
@@ -51,7 +53,10 @@ pub async fn handle_request(
     Ok(())
 }
 
-async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<SocksRequest> {
+async fn parse_request<R>(reader: &mut BufReader<R>) -> io::Result<SocksRequest>
+where
+    R: AsyncRead + Unpin,
+{
     let version = reader.read_u8().await?;
     if version != SOCKS5_VERSION {
         error!("Invalid SOCKS version: {}", version);
@@ -110,12 +115,16 @@ async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<Sock
     })
 }
 
-async fn handle_client_request(
+async fn handle_client_request<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    reader: &mut BufReader<OwnedReadHalf>,
-    writer: &mut BufWriter<OwnedWriteHalf>,
-) -> io::Result<()> {
+    reader: &mut BufReader<R>,
+    writer: &mut BufWriter<W>,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     match client_request.command {
         CONNECT => {
             handle_connect_command(client_request, client_addr, reader, writer).await?;
@@ -145,12 +154,16 @@ async fn handle_client_request(
     }
 }
 
-async fn handle_connect_command(
+async fn handle_connect_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    client_reader: &mut BufReader<OwnedReadHalf>,
-    client_writer: &mut BufWriter<OwnedWriteHalf>,
-) -> io::Result<()> {
+    client_reader: &mut BufReader<R>,
+    client_writer: &mut BufWriter<W>,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     debug!(
         "[{client_addr}] Handling CONNECT request: {:?}",
         client_request
@@ -195,13 +208,16 @@ async fn handle_connect_command(
     Ok(())
 }
 
-async fn send_reply(
-    writer: &mut BufWriter<OwnedWriteHalf>,
+async fn send_reply<W>(
+    writer: &mut BufWriter<W>,
     reply_code: u8,
     addr_type: u8,
     addr_bytes: &[u8],
     port: u16,
-) -> io::Result<()> {
+) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
     writer.write_u8(SOCKS5_VERSION).await?;
     writer.write_u8(reply_code).await?;
     writer.write_u8(RESERVED).await?;

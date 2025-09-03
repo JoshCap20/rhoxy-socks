@@ -1,9 +1,6 @@
 use std::{io, net::SocketAddr};
 
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter},
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::{debug, error};
 
 use crate::connection::SOCKS5_VERSION;
@@ -17,11 +14,15 @@ pub struct HandshakeRequest {
 
 const NO_AUTHENTICATION_REQUIRED: u8 = 0x00;
 
-pub async fn perform_handshake(
-    reader: &mut BufReader<OwnedReadHalf>,
-    writer: &mut BufWriter<OwnedWriteHalf>,
+pub async fn perform_handshake<R, W>(
+    reader: &mut BufReader<R>,
+    writer: &mut BufWriter<W>,
     client_addr: SocketAddr,
-) -> io::Result<()> {
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     debug!("Performing handshake for client {}", client_addr);
 
     let handshake_request = parse_client_greeting(reader).await?;
@@ -36,9 +37,10 @@ pub async fn perform_handshake(
     Ok(())
 }
 
-async fn parse_client_greeting(
-    reader: &mut BufReader<OwnedReadHalf>,
-) -> io::Result<HandshakeRequest> {
+async fn parse_client_greeting<R>(reader: &mut BufReader<R>) -> io::Result<HandshakeRequest>
+where
+    R: AsyncRead + Unpin,
+{
     let version = reader.read_u8().await?;
     if version != SOCKS5_VERSION {
         error!("Invalid SOCKS version: {}", version);
@@ -59,10 +61,13 @@ async fn parse_client_greeting(
     })
 }
 
-async fn handle_client_greeting(
+async fn handle_client_greeting<W>(
     handshake_request: &HandshakeRequest,
-    writer: &mut BufWriter<OwnedWriteHalf>,
-) -> io::Result<()> {
+    writer: &mut BufWriter<W>,
+) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
     /// TODO: Support all authentication methods
     ///           o  X'01' GSSAPI
     ///           o  X'02' USERNAME/PASSWORD
