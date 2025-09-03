@@ -16,6 +16,14 @@ pub struct SocksRequest {
     pub dest_port: u16,
 }
 
+const SOCKS5_VERSION: u8 = 0x05;
+const CONNECT: u8 = 0x01;
+const BIND: u8 = 0x02;
+const UDP_ASSOCIATE: u8 = 0x03;
+const ATYP_IPV4: u8 = 0x01;
+const ATYP_DOMAIN: u8 = 0x03;
+const ATYP_IPV6: u8 = 0x04;
+
 pub async fn handle_request(
     reader: &mut BufReader<OwnedReadHalf>,
     writer: &mut BufWriter<OwnedWriteHalf>,
@@ -36,26 +44,40 @@ pub async fn handle_request(
 
 async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<SocksRequest> {
     let version = reader.read_u8().await?;
+    if version != SOCKS5_VERSION {
+        error!("Invalid SOCKS version: {}", version);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
+        ));
+    }
+
     let command = reader.read_u8().await?;
     let reserved = reader.read_u8().await?;
+    if reserved != 0x00 {
+        error!("Invalid reserved byte: {}", reserved);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Reserved byte must be 0x00",
+        ));
+    }
+
     let address_type = reader.read_u8().await?;
 
     let dest_addr = match address_type {
-        1 => {
-            // IPv4
+        ATYP_IPV4 => {
             let mut addr = [0u8; 4];
             reader.read_exact(&mut addr).await?;
             std::net::IpAddr::from(addr)
         }
-        3 => {
+        ATYP_DOMAIN => {
             error!("Domain name address type not yet supported");
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "Domain name resolution not implemented",
             ));
         }
-        4 => {
-            // IPv6
+        ATYP_IPV6 => {
             let mut addr = [0u8; 16];
             reader.read_exact(&mut addr).await?;
             std::net::IpAddr::from(addr)
@@ -84,13 +106,13 @@ async fn handle_client_request(
     writer: &mut BufWriter<OwnedWriteHalf>,
 ) -> io::Result<()> {
     match client_request.command {
-        1 => {
+        CONNECT => {
             debug!("Handling CONNECT request");
         }
-        2 => {
+        BIND => {
             debug!("Handling BIND request");
         }
-        3 => {
+        UDP_ASSOCIATE => {
             debug!("Handling UDP ASSOCIATE request");
         }
         _ => {
