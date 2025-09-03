@@ -13,6 +13,13 @@ struct Args {
     verbose: bool,
 }
 
-fn main() {
-    println!("Hello, world!");
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+
+    if args.verbose {
+        // TODO: init tracing subscriber with debug level
+    } else {
+        // TODO: init tracing subscriber with info level
+    }
 }
