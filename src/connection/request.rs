@@ -23,27 +23,22 @@ pub async fn handle_request(
 ) -> io::Result<()> {
     debug!("Handling request from {}", client_addr);
 
-    let client_request = parse_request(reader, client_addr).await?;
-    handle_client_request(client_request, writer, client_addr).await?;
+    let client_request = parse_request(reader).await?;
+    debug!(
+        "Parsed client request from {}: {:?}",
+        client_addr, client_request
+    );
+
+    handle_client_request(client_request, writer).await?;
 
     Ok(())
 }
 
-async fn parse_request(
-    reader: &mut BufReader<OwnedReadHalf>,
-    client_addr: SocketAddr,
-) -> io::Result<SocksRequest> {
-    debug!("Parsing request from {}", client_addr);
-
+async fn parse_request(reader: &mut BufReader<OwnedReadHalf>) -> io::Result<SocksRequest> {
     let version = reader.read_u8().await?;
     let command = reader.read_u8().await?;
     let reserved = reader.read_u8().await?;
     let address_type = reader.read_u8().await?;
-
-    debug!(
-        "Client {} sent request: version={}, command={}, reserved={}, address_type={}",
-        client_addr, version, command, reserved, address_type
-    );
 
     let dest_addr = match address_type {
         1 => {
@@ -73,10 +68,7 @@ async fn parse_request(
         }
     };
     let dest_port = reader.read_u16().await?;
-    debug!(
-        "Client {} wants to connect to {} : {}",
-        client_addr, dest_addr, dest_port
-    );
+
     Ok(SocksRequest {
         version,
         command,
@@ -90,10 +82,7 @@ async fn parse_request(
 async fn handle_client_request(
     client_request: SocksRequest,
     writer: &mut BufWriter<OwnedWriteHalf>,
-    client_addr: SocketAddr,
 ) -> io::Result<()> {
-    debug!("Handling client request from {}: {:?}", client_addr, client_request);
-
     match client_request.command {
         1 => {
             debug!("Handling CONNECT request");
