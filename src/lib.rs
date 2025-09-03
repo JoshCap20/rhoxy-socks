@@ -1,7 +1,8 @@
 use std::io;
 use std::net::SocketAddr;
-use tokio::io::{BufReader, BufWriter};
+use tokio::io::{AsyncReadExt, BufReader, BufWriter};
 use tokio::net::TcpStream;
+use tracing::debug;
 
 /// Should be organized into these steps:
 /// 1. Handle handshake/authentication negotation
@@ -70,5 +71,11 @@ async fn handle_handshake(
    ///       o  X'FF' NO ACCEPTABLE METHODS
 
    /// The client and server then enter a method-specific sub-negotiation.
+    debug!("Handling handshake for client {}", client_addr);
+
+    let version = reader.read_u8().await?;
+    let nmethods = reader.read_u8().await?;
+    debug!("Client {} is using SOCKS version {} with {} methods", client_addr, version, nmethods);
+
     Ok(())
 }
