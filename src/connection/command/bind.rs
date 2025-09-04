@@ -2,7 +2,9 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::request::SocksRequest;
+use crate::connection::{
+    AddressType, ERROR_ADDR, ERROR_PORT, Reply, request::SocksRequest, send_reply,
+};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
@@ -19,9 +21,14 @@ where
         client_request
     );
 
-    /// Need to send two replies
-    /// The first is sent after the server creates and binds a new socket.
-    /// The second reply occurs only after the anticipated incoming connection succeeds or fails.
+    send_reply(
+        client_writer,
+        Reply::COMMAND_NOT_SUPPORTED,
+        AddressType::IPV4,
+        &ERROR_ADDR,
+        ERROR_PORT,
+    )
+    .await?;
 
     error!("[{client_addr}] BIND command is not supported");
     return Err(io::Error::new(

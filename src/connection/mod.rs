@@ -9,6 +9,9 @@ use tracing::error;
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const RESERVED: u8 = 0x00;
+// Since socks5 still requires dest.addr and port lets use 0.0.0.0:0 for now
+pub const ERROR_ADDR: [u8; 4] = [0, 0, 0, 0];
+pub const ERROR_PORT: u16 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
