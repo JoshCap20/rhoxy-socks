@@ -3,15 +3,16 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::join;
 use tokio::{
-    io::{AsyncWriteExt, BufReader, BufWriter, copy},
+    io::{BufReader, BufWriter, copy},
     net::TcpStream,
 };
 use tracing::debug;
 
+use crate::connection::command::send_reply;
 use crate::connection::request::SocksRequest;
-use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION};
+use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS};
 
-pub async fn handle_connect_command<R, W>(
+pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     client_reader: &mut BufReader<R>,
@@ -65,29 +66,10 @@ where
     Ok(())
 }
 
-// is there a public for testing annotation like java?
-pub async fn send_reply<W>(
-    writer: &mut BufWriter<W>,
-    reply_code: u8,
-    addr_type: u8,
-    addr_bytes: &[u8],
-    port: u16,
-) -> io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    writer.write_u8(SOCKS5_VERSION).await?;
-    writer.write_u8(reply_code).await?;
-    writer.write_u8(RESERVED).await?;
-    writer.write_u8(addr_type).await?;
-    writer.write_all(addr_bytes).await?;
-    writer.write_u16(port).await?;
-    writer.flush().await?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::connection::{RESERVED, SOCKS5_VERSION};
+
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
     use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};

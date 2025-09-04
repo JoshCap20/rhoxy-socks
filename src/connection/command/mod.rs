@@ -1,10 +1,12 @@
 use std::{io, net::SocketAddr};
 
-use crate::connection::request::SocksRequest;
-use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use crate::connection::{RESERVED, SOCKS5_VERSION, request::SocksRequest};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::error;
 
+pub mod bind;
 pub mod connect;
+pub mod udp_associate;
 
 #[cfg(test)]
 mod tests;
@@ -31,27 +33,21 @@ impl Command {
     {
         match self {
             Command::Connect => {
-                connect::handle_connect_command(
+                connect::handle_command(client_request, client_addr, client_reader, client_writer)
+                    .await?;
+            }
+            Command::Bind => {
+                bind::handle_command(client_request, client_addr, client_reader, client_writer)
+                    .await?;
+            }
+            Command::UdpAssociate => {
+                udp_associate::handle_command(
                     client_request,
                     client_addr,
                     client_reader,
                     client_writer,
                 )
                 .await?;
-            }
-            Command::Bind => {
-                error!("[{client_addr}] BIND command is not supported");
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "BIND request handling not implemented",
-                ));
-            }
-            Command::UdpAssociate => {
-                error!("[{client_addr}] UDP_ASSOCIATE command is not supported");
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "UDP ASSOCIATE request handling not implemented",
-                ));
             }
         }
         Ok(())
@@ -73,8 +69,28 @@ impl Command {
     pub fn name(&self) -> &'static str {
         match self {
             Command::Connect => "CONNECT",
-            Command::Bind => "BIND", 
+            Command::Bind => "BIND",
             Command::UdpAssociate => "UDP_ASSOCIATE",
         }
     }
+}
+
+pub async fn send_reply<W>(
+    writer: &mut BufWriter<W>,
+    reply_code: u8,
+    addr_type: u8,
+    addr_bytes: &[u8],
+    port: u16,
+) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    writer.write_u8(SOCKS5_VERSION).await?;
+    writer.write_u8(reply_code).await?;
+    writer.write_u8(RESERVED).await?;
+    writer.write_u8(addr_type).await?;
+    writer.write_all(addr_bytes).await?;
+    writer.write_u16(port).await?;
+    writer.flush().await?;
+    Ok(())
 }
