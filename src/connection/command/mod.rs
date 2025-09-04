@@ -6,6 +6,7 @@ use tracing::error;
 
 pub mod bind;
 pub mod connect;
+pub mod udp_associate;
 
 #[cfg(test)]
 mod tests;
@@ -40,11 +41,13 @@ impl Command {
                     .await?;
             }
             Command::UdpAssociate => {
-                error!("[{client_addr}] UDP_ASSOCIATE command is not supported");
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "UDP ASSOCIATE request handling not implemented",
-                ));
+                udp_associate::handle_command(
+                    client_request,
+                    client_addr,
+                    client_reader,
+                    client_writer,
+                )
+                .await?;
             }
         }
         Ok(())
