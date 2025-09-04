@@ -22,6 +22,10 @@ where
         client_request
     );
 
+    /// Need to send two replies
+    /// The first is sent after the server creates and binds a new socket.
+    /// The second reply occurs only after the anticipated incoming connection succeeds or fails.
+
     error!("[{client_addr}] BIND command is not supported");
     return Err(io::Error::new(
         io::ErrorKind::Unsupported,

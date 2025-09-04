@@ -64,6 +64,7 @@ where
 
     let address_type = reader.read_u8().await?;
 
+    // TODO: Move this to an enum struct
     let dest_addr = match address_type {
         ATYP_IPV4 => {
             let mut addr = [0u8; 4];
@@ -71,11 +72,42 @@ where
             std::net::IpAddr::from(addr)
         }
         ATYP_DOMAIN => {
-            error!("Domain name address type not yet supported");
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "Domain name resolution not implemented",
-            ));
+            let domain_len = reader.read_u8().await? as usize;
+            if domain_len == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Empty domain name",
+                ));
+            }
+
+            let mut domain = vec![0u8; domain_len];
+            reader.read_exact(&mut domain).await?;
+
+            let domain_str = String::from_utf8(domain).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
+            })?;
+
+            let mut addrs_iter =
+                tokio::net::lookup_host(domain_str.as_str())
+                    .await
+                    .map_err(|e| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("DNS resolution failed: {}", e),
+                        )
+                    })?;
+
+            let addr = addrs_iter
+                .next()
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "No addresses resolved for domain",
+                    )
+                })?
+                .ip();
+
+            addr
         }
         ATYP_IPV6 => {
             let mut addr = [0u8; 16];
