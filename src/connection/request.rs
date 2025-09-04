@@ -1,5 +1,5 @@
 use std::io;
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 use tracing::error;
 
 use crate::connection::{AddressType, RESERVED, SOCKS5_VERSION};
@@ -15,10 +15,12 @@ pub struct SocksRequest {
 }
 
 impl SocksRequest {
-    pub async fn parse_request<R>(reader: &mut BufReader<R>) -> io::Result<SocksRequest>
+    pub async fn parse_request<R, W>(reader: &mut BufReader<R>, writer: &mut BufWriter<W>) -> io::Result<SocksRequest>
     where
         R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin,
     {
+        // TODO: Implement proper error responses
         let version = reader.read_u8().await?;
         if version != SOCKS5_VERSION {
             error!("Invalid SOCKS version: {}", version);

@@ -3,7 +3,7 @@ pub mod connect;
 pub mod udp_associate;
 
 use std::{io, net::SocketAddr};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
 use crate::connection::{RESERVED, SOCKS5_VERSION, request::SocksRequest};
 

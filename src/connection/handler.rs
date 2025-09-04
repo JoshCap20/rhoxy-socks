@@ -15,7 +15,7 @@ where
 {
     debug!("Handling request from {}", client_addr);
 
-    let client_request = SocksRequest::parse_request(reader).await?;
+    let client_request = SocksRequest::parse_request(reader, writer).await?;
     debug!(
         "Parsed client request from {}: {:?}",
         client_addr, client_request
@@ -52,7 +52,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{send_reply, AddressType, Reply, RESERVED, SOCKS5_VERSION};
+    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, send_reply, command::Command};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
@@ -68,7 +68,8 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let mut writer = BufWriter::new(client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse valid request");
         assert_eq!(request.version, SOCKS5_VERSION);
@@ -91,7 +92,8 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let mut writer = BufWriter::new(client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
@@ -133,7 +135,8 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let mut writer = BufWriter::new(client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse IPv6 request");
         assert_eq!(request.version, SOCKS5_VERSION);
@@ -159,7 +162,8 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let mut writer = BufWriter::new(client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_ok());
         let request = result.unwrap();
         assert_eq!(request.version, SOCKS5_VERSION);
@@ -182,7 +186,8 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let mut writer = BufWriter::new(client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
@@ -204,7 +209,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
@@ -226,7 +233,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
@@ -241,7 +250,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse BIND request");
         assert_eq!(request.command, Command::BIND);
@@ -261,7 +272,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse UDP_ASSOCIATE request");
         assert_eq!(request.command, Command::UDP_ASSOCIATE);
@@ -281,7 +294,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse request with invalid command");
         assert_eq!(request.command, 0xFF);
@@ -297,7 +312,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
@@ -314,7 +331,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
@@ -331,7 +350,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse port 0");
         assert_eq!(request.dest_port, 0);
@@ -347,7 +368,9 @@ mod tests {
         client.flush().await.unwrap();
 
         let mut reader = BufReader::new(server);
-        let request = SocksRequest::parse_request(&mut reader)
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let request = SocksRequest::parse_request(&mut reader, &mut writer)
             .await
             .expect("Should parse port 65535");
         assert_eq!(request.dest_port, 65535);
@@ -361,7 +384,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
@@ -374,7 +399,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
@@ -390,7 +417,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
@@ -405,7 +434,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
@@ -421,7 +452,9 @@ mod tests {
         drop(client);
 
         let mut reader = BufReader::new(server);
-        let result = SocksRequest::parse_request(&mut reader).await;
+        let (_, dummy_client) = tokio::io::duplex(1024);
+        let mut writer = BufWriter::new(dummy_client);
+        let result = SocksRequest::parse_request(&mut reader, &mut writer).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
