@@ -9,7 +9,7 @@ use tokio::{
 use tracing::{debug};
 
 use crate::connection::request::SocksRequest;
-use crate::connection::{ATYP_IPV4, ATYP_IPV6};
+use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION};
 
 pub async fn handle_connect_command<R, W>(
     client_request: SocksRequest,

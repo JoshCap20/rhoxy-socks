@@ -8,7 +8,8 @@ use tokio::{
 };
 use tracing::{debug, error};
 
-use crate::connection::SOCKS5_VERSION;
+use crate::connection::command::Command;
+use crate::connection::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, RESERVED, SOCKS5_VERSION};
 
 #[derive(Debug)]
 pub struct SocksRequest {
@@ -20,14 +21,7 @@ pub struct SocksRequest {
     pub dest_port: u16,
 }
 
-const RESERVED: u8 = 0x00;
 
-const CONNECT: u8 = 0x01;
-const BIND: u8 = 0x02;
-const UDP_ASSOCIATE: u8 = 0x03;
-
-
-const REPLY_SUCCESS: u8 = 0x00;
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -123,39 +117,18 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    match client_request.command {
-        CONNECT => {
-            handle_connect_command(client_request, client_addr, reader, writer).await?;
-            Ok(())
-        }
-        BIND => {
-            // TODO
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "BIND request handling not implemented",
-            ))
-        }
-        UDP_ASSOCIATE => {
-            // TODO
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "UDP ASSOCIATE request handling not implemented",
-            ))
-        }
-        _ => {
-            error!("Unsupported command: {}", client_request.command);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported command",
-            ));
-        }
-    }
+    let command: Command = Command::parse_command(client_request.command)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid command from client {}", client_addr)))?;
+    
+    command.execute(client_request, client_addr, reader, writer).await?;
+
+    Ok(())
 }
 
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{ATYP_IPV4, ATYP_IPV6};
+    use crate::connection::{ATYP_IPV4, ATYP_IPV6, CONNECT, REPLY_SUCCESS};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};

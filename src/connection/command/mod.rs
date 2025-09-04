@@ -1,7 +1,7 @@
 use std::{io, net::SocketAddr};
 
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
-
+use tracing::{error};
 use crate::connection::request::SocksRequest;
 
 pub mod connect;
@@ -35,12 +35,21 @@ impl Command {
                 .await?;
             }
             Command::BIND => {
-                // Handle bind command
+                error!("BIND command is not supported");
             }
             Command::UDP_ASSOCIATE => {
-                // Handle UDP associate command
+                error!("UDP_ASSOCIATE command is not supported");
             }
         }
         Ok(())
+    }
+
+    pub fn parse_command(command: u8) -> Option<Command> {
+        match command {
+            0x01 => Some(Command::CONNECT),
+            0x02 => Some(Command::BIND),
+            0x03 => Some(Command::UDP_ASSOCIATE),
+            _ => None,
+        }
     }
 }
