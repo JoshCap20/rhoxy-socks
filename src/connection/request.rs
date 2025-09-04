@@ -1,14 +1,11 @@
 use std::{io, net::SocketAddr};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::join;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, copy},
-    net::TcpStream,
-};
+use tokio::io::{AsyncReadExt, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::SOCKS5_VERSION;
+use crate::connection::command::Command;
+use crate::connection::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, RESERVED, SOCKS5_VERSION};
 
 #[derive(Debug)]
 pub struct SocksRequest {
@@ -19,17 +16,6 @@ pub struct SocksRequest {
     pub dest_addr: std::net::IpAddr,
     pub dest_port: u16,
 }
-
-const RESERVED: u8 = 0x00;
-
-const CONNECT: u8 = 0x01;
-const BIND: u8 = 0x02;
-const UDP_ASSOCIATE: u8 = 0x03;
-const ATYP_IPV4: u8 = 0x01;
-const ATYP_DOMAIN: u8 = 0x03;
-const ATYP_IPV6: u8 = 0x04;
-
-const REPLY_SUCCESS: u8 = 0x00;
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -125,111 +111,27 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    match client_request.command {
-        CONNECT => {
-            handle_connect_command(client_request, client_addr, reader, writer).await?;
-            Ok(())
-        }
-        BIND => {
-            // TODO
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "BIND request handling not implemented",
-            ))
-        }
-        UDP_ASSOCIATE => {
-            // TODO
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "UDP ASSOCIATE request handling not implemented",
-            ))
-        }
-        _ => {
-            error!("Unsupported command: {}", client_request.command);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported command",
-            ));
-        }
-    }
-}
+    let command: Command = Command::parse_command(client_request.command).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid command from client {}", client_addr),
+        )
+    })?;
 
-async fn handle_connect_command<R, W>(
-    client_request: SocksRequest,
-    client_addr: SocketAddr,
-    client_reader: &mut BufReader<R>,
-    client_writer: &mut BufWriter<W>,
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
-{
-    debug!(
-        "[{client_addr}] Handling CONNECT request: {:?}",
-        client_request
-    );
+    command
+        .execute(client_request, client_addr, reader, writer)
+        .await?;
 
-    let target_stream =
-        TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await?;
-    debug!(
-        "[{client_addr}] Connected to target {}:{}",
-        client_request.dest_addr, client_request.dest_port
-    );
-
-    let destination_addr = target_stream.local_addr()?;
-    let destination_port = destination_addr.port();
-    let destination_addr_type = if destination_addr.is_ipv4() {
-        ATYP_IPV4
-    } else {
-        ATYP_IPV6
-    };
-    let destination_addr_as_bytes = match destination_addr.ip() {
-        std::net::IpAddr::V4(addr) => addr.octets().to_vec(),
-        std::net::IpAddr::V6(addr) => addr.octets().to_vec(),
-    };
-
-    send_reply(
-        client_writer,
-        REPLY_SUCCESS,
-        destination_addr_type,
-        &destination_addr_as_bytes,
-        destination_port,
-    )
-    .await?;
-
-    let (mut target_reader, mut target_writer) = target_stream.into_split();
-    let (client_to_target, target_to_client) = join!(
-        copy(&mut *client_reader, &mut target_writer),
-        copy(&mut target_reader, &mut *client_writer)
-    );
-
-    client_to_target?;
-    target_to_client?;
-    Ok(())
-}
-
-async fn send_reply<W>(
-    writer: &mut BufWriter<W>,
-    reply_code: u8,
-    addr_type: u8,
-    addr_bytes: &[u8],
-    port: u16,
-) -> io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    writer.write_u8(SOCKS5_VERSION).await?;
-    writer.write_u8(reply_code).await?;
-    writer.write_u8(RESERVED).await?;
-    writer.write_u8(addr_type).await?;
-    writer.write_all(addr_bytes).await?;
-    writer.write_u16(port).await?;
-    writer.flush().await?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::connection::{
+        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE,
+        command::connect::send_reply,
+    };
+
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
