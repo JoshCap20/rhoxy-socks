@@ -1,21 +1,11 @@
 use std::{io, net::SocketAddr};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::io::{AsyncReadExt, BufReader, BufWriter};
-use tracing::{debug, error};
+use tokio::io::{BufReader, BufWriter};
+use tracing::debug;
 
+use crate::connection::{parse_request, SocksRequest};
 use crate::connection::command::Command;
-use crate::connection::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, RESERVED, SOCKS5_VERSION};
-
-#[derive(Debug)]
-pub struct SocksRequest {
-    pub version: u8,
-    pub command: u8,
-    pub reserved: u8,
-    pub address_type: u8,
-    pub dest_addr: std::net::IpAddr,
-    pub dest_port: u16,
-}
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -37,97 +27,6 @@ where
     handle_client_request(client_request, client_addr, reader, writer).await?;
 
     Ok(())
-}
-
-async fn parse_request<R>(reader: &mut BufReader<R>) -> io::Result<SocksRequest>
-where
-    R: AsyncRead + Unpin,
-{
-    let version = reader.read_u8().await?;
-    if version != SOCKS5_VERSION {
-        error!("Invalid SOCKS version: {}", version);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
-        ));
-    }
-
-    let command = reader.read_u8().await?;
-    let reserved = reader.read_u8().await?;
-    if reserved != RESERVED {
-        error!("Invalid reserved byte: {}", reserved);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Reserved byte must be 0x00",
-        ));
-    }
-
-    let address_type = reader.read_u8().await?;
-
-    // TODO: Move this to an enum struct
-    let dest_addr = match address_type {
-        ATYP_IPV4 => {
-            let mut addr = [0u8; 4];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        ATYP_DOMAIN => {
-            let domain_len = reader.read_u8().await? as usize;
-            if domain_len == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Empty domain name",
-                ));
-            }
-
-            let mut domain = vec![0u8; domain_len];
-            reader.read_exact(&mut domain).await?;
-
-            let domain_str = String::from_utf8(domain).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
-            })?;
-
-            let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("DNS resolution failed for {}: {}", domain_str, e),
-                )
-            })?;
-
-            let addr = resolved_addrs
-                .get(0)
-                .ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "No addresses resolved for domain",
-                    )
-                })?
-                .ip();
-
-            addr
-        }
-        ATYP_IPV6 => {
-            let mut addr = [0u8; 16];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported address type",
-            ));
-        }
-    };
-    let dest_port = reader.read_u16().await?;
-
-    Ok(SocksRequest {
-        version,
-        command,
-        reserved,
-        address_type,
-        dest_addr,
-        dest_port,
-    })
 }
 
 async fn handle_client_request<R, W>(
@@ -154,15 +53,10 @@ where
     Ok(())
 }
 
-async fn resolve_domain(domain: &str) -> io::Result<Vec<std::net::SocketAddr>> {
-    let addrs: Vec<_> = tokio::net::lookup_host((domain, 0)).await?.collect();
-    Ok(addrs)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE, command::send_reply,
+        command::send_reply, parse_request, ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION, UDP_ASSOCIATE
     };
 
     use super::*;
