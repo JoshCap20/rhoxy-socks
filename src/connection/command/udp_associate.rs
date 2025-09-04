@@ -18,13 +18,13 @@ where
     W: AsyncWrite + Unpin,
 {
     debug!(
-        "[{client_addr}] Handling UDP_ASSOCIATE request: {:?}",
+        "[{client_addr}] Handling UDP ASSOCIATE request: {:?}",
         client_request
     );
 
-    error!("[{client_addr}] UDP_ASSOCIATE command is not supported");
+    error!("[{client_addr}] UDP ASSOCIATE command is not supported");
     return Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "UDP_ASSOCIATE request handling not implemented",
+        "UDP ASSOCIATE request handling not implemented",
     ));
 }
