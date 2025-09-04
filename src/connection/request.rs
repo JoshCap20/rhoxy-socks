@@ -1,21 +1,9 @@
 use std::{io, net::SocketAddr};
-
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::io::{AsyncReadExt, BufReader, BufWriter};
-use tracing::{debug, error};
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use tracing::debug;
 
 use crate::connection::command::Command;
-use crate::connection::{ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, RESERVED, SOCKS5_VERSION};
-
-#[derive(Debug)]
-pub struct SocksRequest {
-    pub version: u8,
-    pub command: u8,
-    pub reserved: u8,
-    pub address_type: u8,
-    pub dest_addr: std::net::IpAddr,
-    pub dest_port: u16,
-}
+use crate::connection::{SocksRequest, parse_request};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -37,68 +25,6 @@ where
     handle_client_request(client_request, client_addr, reader, writer).await?;
 
     Ok(())
-}
-
-async fn parse_request<R>(reader: &mut BufReader<R>) -> io::Result<SocksRequest>
-where
-    R: AsyncRead + Unpin,
-{
-    let version = reader.read_u8().await?;
-    if version != SOCKS5_VERSION {
-        error!("Invalid SOCKS version: {}", version);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
-        ));
-    }
-
-    let command = reader.read_u8().await?;
-    let reserved = reader.read_u8().await?;
-    if reserved != RESERVED {
-        error!("Invalid reserved byte: {}", reserved);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Reserved byte must be 0x00",
-        ));
-    }
-
-    let address_type = reader.read_u8().await?;
-
-    let dest_addr = match address_type {
-        ATYP_IPV4 => {
-            let mut addr = [0u8; 4];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        ATYP_DOMAIN => {
-            error!("Domain name address type not yet supported");
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "Domain name resolution not implemented",
-            ));
-        }
-        ATYP_IPV6 => {
-            let mut addr = [0u8; 16];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported address type",
-            ));
-        }
-    };
-    let dest_port = reader.read_u16().await?;
-
-    Ok(SocksRequest {
-        version,
-        command,
-        reserved,
-        address_type,
-        dest_addr,
-        dest_port,
-    })
 }
 
 async fn handle_client_request<R, W>(
@@ -128,7 +54,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE, command::send_reply,
+        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION,
+        UDP_ASSOCIATE, command::send_reply, parse_request,
     };
 
     use super::*;
@@ -218,14 +145,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_parse_request_domain_name_unsupported() {
+    async fn test_parse_request_domain_name_valid() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        let domain = b"google.com";
+        let mut data = vec![0x05, 0x01, 0x00, 0x03]; // ATYP_DOMAIN
+        data.push(domain.len() as u8); // Domain length
+        data.extend_from_slice(domain);
+        data.extend_from_slice(&80u16.to_be_bytes()); // Port 80
+
+        client.write_all(&data).await.unwrap();
+        client.flush().await.unwrap();
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_ok());
+        let request = result.unwrap();
+        assert_eq!(request.version, SOCKS5_VERSION);
+        assert_eq!(request.command, CONNECT);
+        assert!(!request.dest_addr.is_unspecified());
+        assert_eq!(request.dest_port, 80);
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_empty() {
         let (mut client, server) = tokio::io::duplex(1024);
         client
             .write_all(&[
                 0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
-                0x0B, // Domain length (11)
-                b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', 0x00,
-                0x50, // Port 80
+                0x00, // Domain length (0 - invalid)
+                0x00, 0x50, // Port 80
             ])
             .await
             .unwrap();
@@ -235,11 +183,50 @@ mod tests {
         let result = parse_request(&mut reader).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
-        assert!(
-            err.to_string()
-                .contains("Domain name resolution not implemented")
-        );
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("Empty domain name"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_invalid_utf8() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        client
+            .write_all(&[
+                0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
+                0x04, // Domain length (4)
+                0xFF, 0xFE, 0xFD, 0xFC, // Invalid UTF-8
+                0x00, 0x50, // Port 80
+            ])
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("Invalid domain name encoding"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_truncated() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        client
+            .write_all(&[
+                0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
+                0x10, // Domain length (16) but we only provide 4 bytes
+                b'e', b'x', b'a', b'm',
+            ])
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+        drop(client);
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
 
     #[tokio::test]

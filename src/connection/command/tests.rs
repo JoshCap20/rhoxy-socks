@@ -64,7 +64,7 @@ mod command_tests {
     async fn test_bind_command_returns_error() {
         use std::net::SocketAddr;
         use tokio::io::{duplex, BufReader, BufWriter};
-        use crate::connection::request::SocksRequest;
+        use crate::connection::SocksRequest;
         use std::net::{IpAddr, Ipv4Addr};
 
         let (_, server) = duplex(1024);
@@ -94,7 +94,7 @@ mod command_tests {
     async fn test_udp_associate_command_returns_error() {
         use std::net::SocketAddr;
         use tokio::io::{duplex, BufReader, BufWriter};
-        use crate::connection::request::SocksRequest;
+        use crate::connection::SocksRequest;
         use std::net::{IpAddr, Ipv4Addr};
 
         let (_, server) = duplex(1024);
