@@ -19,13 +19,6 @@ mod command_tests {
     }
 
     #[test]
-    fn test_command_as_u8() {
-        assert_eq!(Command::Connect.as_u8(), 0x01);
-        assert_eq!(Command::Bind.as_u8(), 0x02);
-        assert_eq!(Command::UdpAssociate.as_u8(), 0x03);
-    }
-
-    #[test]
     fn test_command_name() {
         assert_eq!(Command::Connect.name(), "CONNECT");
         assert_eq!(Command::Bind.name(), "BIND");

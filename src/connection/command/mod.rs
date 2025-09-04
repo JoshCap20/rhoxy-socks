@@ -19,6 +19,10 @@ pub enum Command {
 }
 
 impl Command {
+    pub const CONNECT: u8 = Self::Connect as u8;
+    pub const BIND: u8 = Self::Bind as u8;
+    pub const UDP_ASSOCIATE: u8 = Self::UdpAssociate as u8;
+
     pub async fn execute<R, W>(
         &self,
         client_request: SocksRequest,
@@ -59,10 +63,6 @@ impl Command {
             0x03 => Some(Command::UdpAssociate),
             _ => None,
         }
-    }
-
-    pub fn as_u8(&self) -> u8 {
-        *self as u8
     }
 
     pub fn name(&self) -> &'static str {
