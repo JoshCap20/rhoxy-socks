@@ -3,4 +3,8 @@
 
 async SOCKS5 impl with rust
 
+all this is so far is handshake and connect command for tcp tunneling.
+
+look at issues tab to see current progress
+
 tba
