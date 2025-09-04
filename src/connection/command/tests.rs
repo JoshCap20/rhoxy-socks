@@ -55,16 +55,16 @@ mod command_tests {
 
     #[tokio::test]
     async fn test_bind_command_returns_error() {
-        use std::net::SocketAddr;
-        use tokio::io::{duplex, BufReader, BufWriter};
         use crate::connection::SocksRequest;
+        use std::net::SocketAddr;
         use std::net::{IpAddr, Ipv4Addr};
+        use tokio::io::{BufReader, BufWriter, duplex};
 
         let (_, server) = duplex(1024);
         let mut reader = BufReader::new(server);
         let (client, _) = duplex(1024);
         let mut writer = BufWriter::new(client);
-        
+
         let request = SocksRequest {
             version: 5,
             command: 0x02,
@@ -75,26 +75,31 @@ mod command_tests {
         };
 
         let client_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
-        let result = Command::Bind.execute(request, client_addr, &mut reader, &mut writer).await;
-        
+        let result = Command::Bind
+            .execute(request, client_addr, &mut reader, &mut writer)
+            .await;
+
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::Unsupported);
-        assert!(err.to_string().contains("BIND request handling not implemented"));
+        assert!(
+            err.to_string()
+                .contains("BIND request handling not implemented")
+        );
     }
 
     #[tokio::test]
     async fn test_udp_associate_command_returns_error() {
-        use std::net::SocketAddr;
-        use tokio::io::{duplex, BufReader, BufWriter};
         use crate::connection::SocksRequest;
+        use std::net::SocketAddr;
         use std::net::{IpAddr, Ipv4Addr};
+        use tokio::io::{BufReader, BufWriter, duplex};
 
         let (_, server) = duplex(1024);
         let mut reader = BufReader::new(server);
         let (client, _) = duplex(1024);
         let mut writer = BufWriter::new(client);
-        
+
         let request = SocksRequest {
             version: 5,
             command: 0x03,
@@ -105,11 +110,16 @@ mod command_tests {
         };
 
         let client_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
-        let result = Command::UdpAssociate.execute(request, client_addr, &mut reader, &mut writer).await;
-        
+        let result = Command::UdpAssociate
+            .execute(request, client_addr, &mut reader, &mut writer)
+            .await;
+
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::Unsupported);
-        assert!(err.to_string().contains("UDP ASSOCIATE request handling not implemented"));
+        assert!(
+            err.to_string()
+                .contains("UDP ASSOCIATE request handling not implemented")
+        );
     }
 }

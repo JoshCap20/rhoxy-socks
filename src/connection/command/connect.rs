@@ -6,8 +6,8 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::{AddressType, SocksRequest, REPLY_SUCCESS};
 use crate::connection::command::send_reply;
+use crate::connection::{AddressType, REPLY_SUCCESS, SocksRequest};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
@@ -77,9 +77,15 @@ mod tests {
         let mut writer = BufWriter::new(server);
 
         let addr_bytes = Ipv4Addr::new(192, 168, 1, 1).octets().to_vec();
-        send_reply(&mut writer, REPLY_SUCCESS, AddressType::IPV4, &addr_bytes, 3128)
-            .await
-            .expect("Should send IPv4 reply");
+        send_reply(
+            &mut writer,
+            REPLY_SUCCESS,
+            AddressType::IPV4,
+            &addr_bytes,
+            3128,
+        )
+        .await
+        .expect("Should send IPv4 reply");
         writer.flush().await.unwrap();
 
         let mut response = vec![0u8; 10];
@@ -98,9 +104,15 @@ mod tests {
         let mut writer = BufWriter::new(server);
 
         let addr_bytes = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1).octets().to_vec();
-        send_reply(&mut writer, REPLY_SUCCESS, AddressType::IPV6, &addr_bytes, 8080)
-            .await
-            .expect("Should send IPv6 reply");
+        send_reply(
+            &mut writer,
+            REPLY_SUCCESS,
+            AddressType::IPV6,
+            &addr_bytes,
+            8080,
+        )
+        .await
+        .expect("Should send IPv6 reply");
         writer.flush().await.unwrap();
 
         let mut response = vec![0u8; 22];
@@ -143,9 +155,15 @@ mod tests {
         let mut writer = BufWriter::new(server);
         let addr_bytes = vec![127, 0, 0, 1];
 
-        send_reply(&mut writer, REPLY_SUCCESS, AddressType::IPV4, &addr_bytes, 0)
-            .await
-            .expect("Should send reply with port 0");
+        send_reply(
+            &mut writer,
+            REPLY_SUCCESS,
+            AddressType::IPV4,
+            &addr_bytes,
+            0,
+        )
+        .await
+        .expect("Should send reply with port 0");
         writer.flush().await.unwrap();
 
         let mut response = vec![0u8; 10];
@@ -158,9 +176,15 @@ mod tests {
         let (server, mut client) = duplex(1024);
         let mut writer = BufWriter::new(server);
 
-        send_reply(&mut writer, REPLY_SUCCESS, AddressType::IPV4, &addr_bytes, 65535)
-            .await
-            .expect("Should send reply with port 65535");
+        send_reply(
+            &mut writer,
+            REPLY_SUCCESS,
+            AddressType::IPV4,
+            &addr_bytes,
+            65535,
+        )
+        .await
+        .expect("Should send reply with port 65535");
         writer.flush().await.unwrap();
 
         let mut response = vec![0u8; 10];
