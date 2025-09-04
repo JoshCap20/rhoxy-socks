@@ -52,7 +52,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, command::send_reply};
+    use crate::connection::{send_reply, AddressType, Reply, RESERVED, SOCKS5_VERSION};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};

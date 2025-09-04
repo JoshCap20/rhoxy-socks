@@ -6,8 +6,8 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::{AddressType, Reply};
-use crate::connection::{command::send_reply, request::SocksRequest};
+use crate::connection::{send_reply, AddressType, Reply};
+use crate::connection::{request::SocksRequest};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,

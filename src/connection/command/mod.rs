@@ -73,23 +73,3 @@ impl Command {
         }
     }
 }
-
-pub async fn send_reply<W>(
-    writer: &mut BufWriter<W>,
-    reply_code: u8,
-    addr_type: u8,
-    addr_bytes: &[u8],
-    port: u16,
-) -> io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    writer.write_u8(SOCKS5_VERSION).await?;
-    writer.write_u8(reply_code).await?;
-    writer.write_u8(RESERVED).await?;
-    writer.write_u8(addr_type).await?;
-    writer.write_all(addr_bytes).await?;
-    writer.write_u16(port).await?;
-    writer.flush().await?;
-    Ok(())
-}
