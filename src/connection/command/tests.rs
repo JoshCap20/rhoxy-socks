@@ -3,6 +3,10 @@ use super::*;
 #[cfg(test)]
 mod command_tests {
     use super::*;
+    use crate::connection::request::SocksRequest;
+    use std::net::SocketAddr;
+    use std::net::{IpAddr, Ipv4Addr};
+    use tokio::io::{BufReader, BufWriter, duplex};
 
     #[test]
     fn test_command_parse_valid() {
@@ -55,11 +59,6 @@ mod command_tests {
 
     #[tokio::test]
     async fn test_bind_command_returns_error() {
-        use crate::connection::SocksRequest;
-        use std::net::SocketAddr;
-        use std::net::{IpAddr, Ipv4Addr};
-        use tokio::io::{BufReader, BufWriter, duplex};
-
         let (_, server) = duplex(1024);
         let mut reader = BufReader::new(server);
         let (client, _) = duplex(1024);
@@ -90,11 +89,6 @@ mod command_tests {
 
     #[tokio::test]
     async fn test_udp_associate_command_returns_error() {
-        use crate::connection::SocksRequest;
-        use std::net::SocketAddr;
-        use std::net::{IpAddr, Ipv4Addr};
-        use tokio::io::{BufReader, BufWriter, duplex};
-
         let (_, server) = duplex(1024);
         let mut reader = BufReader::new(server);
         let (client, _) = duplex(1024);
