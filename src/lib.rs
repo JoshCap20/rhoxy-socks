@@ -13,7 +13,7 @@ pub async fn handle_connection(stream: TcpStream, client_addr: SocketAddr) -> io
     let mut writer = BufWriter::new(writer);
 
     connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
-    connection::request::handle_request(&mut reader, &mut writer, client_addr).await?;
+    connection::handler::handle_request(&mut reader, &mut writer, client_addr).await?;
 
     Ok(())
 }
