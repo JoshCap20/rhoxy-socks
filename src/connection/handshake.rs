@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::SOCKS5_VERSION;
+use crate::connection::{Method, SOCKS5_VERSION};
 
 #[derive(Debug)]
 pub struct HandshakeRequest {
@@ -10,8 +10,6 @@ pub struct HandshakeRequest {
     pub nmethods: u8,
     pub methods: Vec<u8>,
 }
-
-const NO_AUTHENTICATION_REQUIRED: u8 = 0x00;
 
 pub async fn perform_handshake<R, W>(
     reader: &mut BufReader<R>,
@@ -67,13 +65,7 @@ async fn handle_client_greeting<W>(
 where
     W: AsyncWrite + Unpin,
 {
-    /// TODO: Support all authentication methods
-    ///           o  X'01' GSSAPI
-    ///           o  X'02' USERNAME/PASSWORD
-    ///           o  X'03' to X'7F' IANA ASSIGNED
-    ///           o  X'80' to X'FE' RESERVED FOR PRIVATE METHODS
-    ///           o  X'FF' NO ACCEPTABLE METHODS
-    let response = [SOCKS5_VERSION, NO_AUTHENTICATION_REQUIRED];
+    let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
     writer.write_all(&response).await?;
     writer.flush().await?;
 
@@ -119,7 +111,7 @@ mod tests {
         let request = HandshakeRequest {
             version: SOCKS5_VERSION,
             nmethods: 1,
-            methods: vec![NO_AUTHENTICATION_REQUIRED],
+            methods: vec![Method::NO_AUTHENTICATION_REQUIRED],
         };
 
         let (server, mut client) = tokio::io::duplex(1024);
@@ -132,7 +124,10 @@ mod tests {
 
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        assert_eq!(response, [SOCKS5_VERSION, NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 
     #[tokio::test]
@@ -284,7 +279,10 @@ mod tests {
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
         // Just returns no auth required for now
-        assert_eq!(response, [SOCKS5_VERSION, NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 
     #[tokio::test]
@@ -305,6 +303,9 @@ mod tests {
 
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        assert_eq!(response, [SOCKS5_VERSION, NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 }

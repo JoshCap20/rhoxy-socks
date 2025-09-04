@@ -3,9 +3,9 @@ pub mod connect;
 pub mod udp_associate;
 
 use std::{io, net::SocketAddr};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
-use crate::connection::{RESERVED, SOCKS5_VERSION, SocksRequest};
+use crate::connection::{RESERVED, SOCKS5_VERSION, request::SocksRequest};
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +19,10 @@ pub enum Command {
 }
 
 impl Command {
+    pub const CONNECT: u8 = Self::Connect as u8;
+    pub const BIND: u8 = Self::Bind as u8;
+    pub const UDP_ASSOCIATE: u8 = Self::UdpAssociate as u8;
+
     pub async fn execute<R, W>(
         &self,
         client_request: SocksRequest,
@@ -61,10 +65,6 @@ impl Command {
         }
     }
 
-    pub fn as_u8(&self) -> u8 {
-        *self as u8
-    }
-
     pub fn name(&self) -> &'static str {
         match self {
             Command::Connect => "CONNECT",
@@ -72,24 +72,4 @@ impl Command {
             Command::UdpAssociate => "UDP_ASSOCIATE",
         }
     }
-}
-
-pub async fn send_reply<W>(
-    writer: &mut BufWriter<W>,
-    reply_code: u8,
-    addr_type: u8,
-    addr_bytes: &[u8],
-    port: u16,
-) -> io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    writer.write_u8(SOCKS5_VERSION).await?;
-    writer.write_u8(reply_code).await?;
-    writer.write_u8(RESERVED).await?;
-    writer.write_u8(addr_type).await?;
-    writer.write_all(addr_bytes).await?;
-    writer.write_u16(port).await?;
-    writer.flush().await?;
-    Ok(())
 }

@@ -1,32 +1,157 @@
 pub mod command;
+pub mod handler;
 pub mod handshake;
 pub mod request;
 
 use std::io;
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
-use tracing::{debug, error};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use tracing::error;
 
 pub const SOCKS5_VERSION: u8 = 0x05;
-pub const ATYP_IPV4: u8 = 0x01;
-pub const ATYP_DOMAIN: u8 = 0x03;
-pub const ATYP_IPV6: u8 = 0x04;
-
-pub const REPLY_SUCCESS: u8 = 0x00;
-
 pub const RESERVED: u8 = 0x00;
 
-pub const CONNECT: u8 = 0x01;
-pub const BIND: u8 = 0x02;
-pub const UDP_ASSOCIATE: u8 = 0x03;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Method {
+    NoAuthenticationRequired = 0x00,
+    Gssapi = 0x01,
+    UsernamePassword = 0x02,
+    IanaAssigned = 0x03,
+    ReservedForPrivateMethods = 0x80,
+    NoAcceptableMethods = 0xFF,
+}
 
-#[derive(Debug)]
-pub struct SocksRequest {
-    pub version: u8,
-    pub command: u8,
-    pub reserved: u8,
-    pub address_type: u8,
-    pub dest_addr: std::net::IpAddr,
-    pub dest_port: u16,
+impl Method {
+    pub const NO_AUTHENTICATION_REQUIRED: u8 = Self::NoAuthenticationRequired as u8;
+    pub const GSSAPI: u8 = Self::Gssapi as u8;
+    pub const USERNAME_PASSWORD: u8 = Self::UsernamePassword as u8;
+    pub const IANA_ASSIGNED: u8 = Self::IanaAssigned as u8;
+    pub const RESERVED_FOR_PRIVATE_METHODS: u8 = Self::ReservedForPrivateMethods as u8;
+    pub const NO_ACCEPTABLE_METHODS: u8 = Self::NoAcceptableMethods as u8;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Reply {
+    Success = 0x00,
+    GeneralFailure = 0x01,
+    ConnectionNotAllowed = 0x02,
+    NetworkUnreachable = 0x03,
+    HostUnreachable = 0x04,
+    ConnectionRefused = 0x05,
+    TtlExpired = 0x06,
+    CommandNotSupported = 0x07,
+    AddressTypeNotSupported = 0x08,
+}
+
+impl Reply {
+    pub const SUCCESS: u8 = Self::Success as u8;
+    pub const GENERAL_FAILURE: u8 = Self::GeneralFailure as u8;
+    pub const CONNECTION_NOT_ALLOWED: u8 = Self::ConnectionNotAllowed as u8;
+    pub const NETWORK_UNREACHABLE: u8 = Self::NetworkUnreachable as u8;
+    pub const HOST_UNREACHABLE: u8 = Self::HostUnreachable as u8;
+    pub const CONNECTION_REFUSED: u8 = Self::ConnectionRefused as u8;
+    pub const TTL_EXPIRED: u8 = Self::TtlExpired as u8;
+    pub const COMMAND_NOT_SUPPORTED: u8 = Self::CommandNotSupported as u8;
+    pub const ADDRESS_TYPE_NOT_SUPPORTED: u8 = Self::AddressTypeNotSupported as u8;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum AddressType {
+    IPv4 = 0x01,
+    DomainName = 0x03,
+    IPv6 = 0x04,
+}
+
+impl AddressType {
+    pub const IPV4: u8 = Self::IPv4 as u8;
+    pub const DOMAIN_NAME: u8 = Self::DomainName as u8;
+    pub const IPV6: u8 = Self::IPv6 as u8;
+
+    pub fn from_u8(value: u8) -> Option<AddressType> {
+        match value {
+            Self::IPV4 => Some(AddressType::IPv4),
+            Self::DOMAIN_NAME => Some(AddressType::DomainName),
+            Self::IPV6 => Some(AddressType::IPv6),
+            _ => None,
+        }
+    }
+
+    pub async fn parse<R>(reader: &mut BufReader<R>, atyp: u8) -> io::Result<std::net::IpAddr>
+    where
+        R: AsyncRead + Unpin,
+    {
+        match AddressType::from_u8(atyp) {
+            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await,
+            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await,
+            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await,
+            None => {
+                error!("Unsupported address type: {}", atyp);
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Unsupported address type",
+                ))
+            }
+        }
+    }
+
+    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut addr = [0u8; 4];
+        reader.read_exact(&mut addr).await?;
+        Ok(std::net::IpAddr::from(addr))
+    }
+
+    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut addr = [0u8; 16];
+        reader.read_exact(&mut addr).await?;
+        Ok(std::net::IpAddr::from(addr))
+    }
+
+    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let domain_len = reader.read_u8().await? as usize;
+        if domain_len == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Empty domain name",
+            ));
+        }
+
+        let mut domain = vec![0u8; domain_len];
+        reader.read_exact(&mut domain).await?;
+
+        let domain_str = String::from_utf8(domain).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
+        })?;
+
+        let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("DNS resolution failed for {}: {}", domain_str, e),
+            )
+        })?;
+
+        let addr = resolved_addrs
+            .get(0)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "No addresses resolved for domain",
+                )
+            })?
+            .ip();
+
+        Ok(addr)
+    }
 }
 
 async fn resolve_domain(domain: &str) -> io::Result<Vec<std::net::SocketAddr>> {
@@ -34,93 +159,22 @@ async fn resolve_domain(domain: &str) -> io::Result<Vec<std::net::SocketAddr>> {
     Ok(addrs)
 }
 
-async fn parse_request<R>(reader: &mut BufReader<R>) -> io::Result<SocksRequest>
+pub async fn send_reply<W>(
+    writer: &mut BufWriter<W>,
+    reply_code: u8,
+    addr_type: u8,
+    addr_bytes: &[u8],
+    port: u16,
+) -> io::Result<()>
 where
-    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
 {
-    let version = reader.read_u8().await?;
-    if version != SOCKS5_VERSION {
-        error!("Invalid SOCKS version: {}", version);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
-        ));
-    }
-
-    let command = reader.read_u8().await?;
-    let reserved = reader.read_u8().await?;
-    if reserved != RESERVED {
-        error!("Invalid reserved byte: {}", reserved);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Reserved byte must be 0x00",
-        ));
-    }
-
-    let address_type = reader.read_u8().await?;
-
-    // TODO: Move this to an enum struct
-    let dest_addr = match address_type {
-        ATYP_IPV4 => {
-            let mut addr = [0u8; 4];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        ATYP_DOMAIN => {
-            let domain_len = reader.read_u8().await? as usize;
-            if domain_len == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Empty domain name",
-                ));
-            }
-
-            let mut domain = vec![0u8; domain_len];
-            reader.read_exact(&mut domain).await?;
-
-            let domain_str = String::from_utf8(domain).map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
-            })?;
-
-            let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("DNS resolution failed for {}: {}", domain_str, e),
-                )
-            })?;
-
-            let addr = resolved_addrs
-                .get(0)
-                .ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "No addresses resolved for domain",
-                    )
-                })?
-                .ip();
-
-            addr
-        }
-        ATYP_IPV6 => {
-            let mut addr = [0u8; 16];
-            reader.read_exact(&mut addr).await?;
-            std::net::IpAddr::from(addr)
-        }
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported address type",
-            ));
-        }
-    };
-    let dest_port = reader.read_u16().await?;
-
-    Ok(SocksRequest {
-        version,
-        command,
-        reserved,
-        address_type,
-        dest_addr,
-        dest_port,
-    })
+    writer.write_u8(SOCKS5_VERSION).await?;
+    writer.write_u8(reply_code).await?;
+    writer.write_u8(RESERVED).await?;
+    writer.write_u8(addr_type).await?;
+    writer.write_all(addr_bytes).await?;
+    writer.write_u16(port).await?;
+    writer.flush().await?;
+    Ok(())
 }
