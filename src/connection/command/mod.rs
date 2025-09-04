@@ -4,6 +4,7 @@ use crate::connection::{RESERVED, SOCKS5_VERSION, request::SocksRequest};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::error;
 
+pub mod bind;
 pub mod connect;
 
 #[cfg(test)]
@@ -31,20 +32,12 @@ impl Command {
     {
         match self {
             Command::Connect => {
-                connect::handle_command(
-                    client_request,
-                    client_addr,
-                    client_reader,
-                    client_writer,
-                )
-                .await?;
+                connect::handle_command(client_request, client_addr, client_reader, client_writer)
+                    .await?;
             }
             Command::Bind => {
-                error!("[{client_addr}] BIND command is not supported");
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "BIND request handling not implemented",
-                ));
+                bind::handle_command(client_request, client_addr, client_reader, client_writer)
+                    .await?;
             }
             Command::UdpAssociate => {
                 error!("[{client_addr}] UDP_ASSOCIATE command is not supported");
