@@ -181,3 +181,17 @@ where
     writer.flush().await?;
     Ok(())
 }
+
+pub async fn send_error_reply<W>(writer: &mut BufWriter<W>, error_code: u8) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    send_reply(
+        writer,
+        error_code,
+        AddressType::IPV4,
+        &ERROR_ADDR,
+        ERROR_PORT,
+    )
+    .await
+}
