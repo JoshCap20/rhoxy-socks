@@ -6,7 +6,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::{AddressType, REPLY_SUCCESS};
+use crate::connection::{AddressType, Reply};
 use crate::connection::{command::send_reply, request::SocksRequest};
 
 pub async fn handle_command<R, W>(
@@ -45,7 +45,7 @@ where
 
     send_reply(
         client_writer,
-        REPLY_SUCCESS,
+        Reply::SUCCESS,
         destination_addr_type,
         &destination_addr_as_bytes,
         destination_port,
@@ -79,7 +79,7 @@ mod tests {
         let addr_bytes = Ipv4Addr::new(192, 168, 1, 1).octets().to_vec();
         send_reply(
             &mut writer,
-            REPLY_SUCCESS,
+            Reply::SUCCESS,
             AddressType::IPV4,
             &addr_bytes,
             3128,
@@ -91,7 +91,7 @@ mod tests {
         let mut response = vec![0u8; 10];
         client.read_exact(&mut response).await.unwrap();
         assert_eq!(response[0], SOCKS5_VERSION);
-        assert_eq!(response[1], REPLY_SUCCESS);
+        assert_eq!(response[1], Reply::SUCCESS);
         assert_eq!(response[2], RESERVED);
         assert_eq!(response[3], AddressType::IPV4);
         assert_eq!(&response[4..8], &addr_bytes);
@@ -106,7 +106,7 @@ mod tests {
         let addr_bytes = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1).octets().to_vec();
         send_reply(
             &mut writer,
-            REPLY_SUCCESS,
+            Reply::SUCCESS,
             AddressType::IPV6,
             &addr_bytes,
             8080,
@@ -118,7 +118,7 @@ mod tests {
         let mut response = vec![0u8; 22];
         client.read_exact(&mut response).await.unwrap();
         assert_eq!(response[0], SOCKS5_VERSION);
-        assert_eq!(response[1], REPLY_SUCCESS);
+        assert_eq!(response[1], Reply::SUCCESS);
         assert_eq!(response[2], RESERVED);
         assert_eq!(response[3], AddressType::IPV6);
         assert_eq!(&response[4..20], &addr_bytes);
@@ -157,7 +157,7 @@ mod tests {
 
         send_reply(
             &mut writer,
-            REPLY_SUCCESS,
+            Reply::SUCCESS,
             AddressType::IPV4,
             &addr_bytes,
             0,
@@ -178,7 +178,7 @@ mod tests {
 
         send_reply(
             &mut writer,
-            REPLY_SUCCESS,
+            Reply::SUCCESS,
             AddressType::IPV4,
             &addr_bytes,
             65535,
