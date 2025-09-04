@@ -128,8 +128,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE,
-        command::connect::send_reply,
+        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE, command::send_reply,
     };
 
     use super::*;
