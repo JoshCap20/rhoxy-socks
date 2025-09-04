@@ -87,18 +87,15 @@ where
                 io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
             })?;
 
-            let mut addrs_iter =
-                tokio::net::lookup_host(domain_str.as_str())
-                    .await
-                    .map_err(|e| {
-                        io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("DNS resolution failed: {}", e),
-                        )
-                    })?;
+            let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("DNS resolution failed for {}: {}", domain_str, e),
+                )
+            })?;
 
-            let addr = addrs_iter
-                .next()
+            let addr = resolved_addrs
+                .get(0)
                 .ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -155,6 +152,11 @@ where
         .await?;
 
     Ok(())
+}
+
+async fn resolve_domain(domain: &str) -> io::Result<Vec<std::net::SocketAddr>> {
+    let addrs: Vec<_> = tokio::net::lookup_host((domain, 0)).await?.collect();
+    Ok(addrs)
 }
 
 #[cfg(test)]
@@ -250,14 +252,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_parse_request_domain_name_unsupported() {
+    async fn test_parse_request_domain_name_valid() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        let domain = b"google.com";
+        let mut data = vec![0x05, 0x01, 0x00, 0x03]; // ATYP_DOMAIN
+        data.push(domain.len() as u8); // Domain length
+        data.extend_from_slice(domain);
+        data.extend_from_slice(&80u16.to_be_bytes()); // Port 80
+
+        client.write_all(&data).await.unwrap();
+        client.flush().await.unwrap();
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_ok());
+        let request = result.unwrap();
+        assert_eq!(request.version, SOCKS5_VERSION);
+        assert_eq!(request.command, CONNECT);
+        assert!(!request.dest_addr.is_unspecified());
+        assert_eq!(request.dest_port, 80);
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_empty() {
         let (mut client, server) = tokio::io::duplex(1024);
         client
             .write_all(&[
                 0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
-                0x0B, // Domain length (11)
-                b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm', 0x00,
-                0x50, // Port 80
+                0x00, // Domain length (0 - invalid)
+                0x00, 0x50, // Port 80
             ])
             .await
             .unwrap();
@@ -267,11 +290,50 @@ mod tests {
         let result = parse_request(&mut reader).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::Unsupported);
-        assert!(
-            err.to_string()
-                .contains("Domain name resolution not implemented")
-        );
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("Empty domain name"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_invalid_utf8() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        client
+            .write_all(&[
+                0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
+                0x04, // Domain length (4)
+                0xFF, 0xFE, 0xFD, 0xFC, // Invalid UTF-8
+                0x00, 0x50, // Port 80
+            ])
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("Invalid domain name encoding"));
+    }
+
+    #[tokio::test]
+    async fn test_parse_request_domain_truncated() {
+        let (mut client, server) = tokio::io::duplex(1024);
+        client
+            .write_all(&[
+                0x05, 0x01, 0x00, 0x03, // ATYP_DOMAIN
+                0x10, // Domain length (16) but we only provide 4 bytes
+                b'e', b'x', b'a', b'm',
+            ])
+            .await
+            .unwrap();
+        client.flush().await.unwrap();
+        drop(client);
+
+        let mut reader = BufReader::new(server);
+        let result = parse_request(&mut reader).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
 
     #[tokio::test]
