@@ -3,9 +3,7 @@ pub mod handshake;
 pub mod request;
 
 use std::io;
-
-use tokio::io::AsyncRead;
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 use tracing::{debug, error};
 
 pub const SOCKS5_VERSION: u8 = 0x05;

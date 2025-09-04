@@ -1,12 +1,11 @@
-use std::{io, net::SocketAddr};
-
-use crate::connection::{RESERVED, SOCKS5_VERSION, request::SocksRequest};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
-use tracing::error;
-
 pub mod bind;
 pub mod connect;
 pub mod udp_associate;
+
+use std::{io, net::SocketAddr};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+
+use crate::connection::{RESERVED, SOCKS5_VERSION, SocksRequest};
 
 #[cfg(test)]
 mod tests;

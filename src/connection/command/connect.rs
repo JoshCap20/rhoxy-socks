@@ -1,15 +1,13 @@
 use std::{io, net::SocketAddr};
-
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::join;
 use tokio::{
-    io::{BufReader, BufWriter, copy},
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
+    join,
     net::TcpStream,
 };
 use tracing::debug;
 
+use crate::connection::SocksRequest;
 use crate::connection::command::send_reply;
-use crate::connection::request::SocksRequest;
 use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS};
 
 pub async fn handle_command<R, W>(

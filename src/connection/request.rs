@@ -1,11 +1,9 @@
 use std::{io, net::SocketAddr};
-
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::io::{BufReader, BufWriter};
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::debug;
 
-use crate::connection::{parse_request, SocksRequest};
 use crate::connection::command::Command;
+use crate::connection::{SocksRequest, parse_request};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -56,7 +54,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        command::send_reply, parse_request, ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION, UDP_ASSOCIATE
+        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION,
+        UDP_ASSOCIATE, command::send_reply, parse_request,
     };
 
     use super::*;
