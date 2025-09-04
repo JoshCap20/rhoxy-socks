@@ -6,10 +6,15 @@ use tracing::error;
 
 pub mod connect;
 
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Command {
-    CONNECT = 0x01,
-    BIND = 0x02,
-    UDP_ASSOCIATE = 0x03,
+    Connect = 0x01,
+    Bind = 0x02,
+    UdpAssociate = 0x03,
 }
 
 impl Command {
@@ -25,7 +30,7 @@ impl Command {
         W: AsyncWrite + Unpin,
     {
         match self {
-            Command::CONNECT => {
+            Command::Connect => {
                 connect::handle_connect_command(
                     client_request,
                     client_addr,
@@ -34,11 +39,19 @@ impl Command {
                 )
                 .await?;
             }
-            Command::BIND => {
-                error!("BIND command is not supported");
+            Command::Bind => {
+                error!("[{client_addr}] BIND command is not supported");
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "BIND request handling not implemented",
+                ));
             }
-            Command::UDP_ASSOCIATE => {
-                error!("UDP_ASSOCIATE command is not supported");
+            Command::UdpAssociate => {
+                error!("[{client_addr}] UDP_ASSOCIATE command is not supported");
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "UDP ASSOCIATE request handling not implemented",
+                ));
             }
         }
         Ok(())
@@ -46,10 +59,22 @@ impl Command {
 
     pub fn parse_command(command: u8) -> Option<Command> {
         match command {
-            0x01 => Some(Command::CONNECT),
-            0x02 => Some(Command::BIND),
-            0x03 => Some(Command::UDP_ASSOCIATE),
+            0x01 => Some(Command::Connect),
+            0x02 => Some(Command::Bind),
+            0x03 => Some(Command::UdpAssociate),
             _ => None,
+        }
+    }
+
+    pub fn as_u8(&self) -> u8 {
+        *self as u8
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::Connect => "CONNECT",
+            Command::Bind => "BIND", 
+            Command::UdpAssociate => "UDP_ASSOCIATE",
         }
     }
 }

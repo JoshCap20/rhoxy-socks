@@ -127,7 +127,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{ATYP_IPV4, ATYP_IPV6, CONNECT, REPLY_SUCCESS};
+    use crate::connection::{
+        ATYP_IPV4, ATYP_IPV6, BIND, CONNECT, REPLY_SUCCESS, UDP_ASSOCIATE,
+        command::connect::send_reply,
+    };
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
