@@ -124,7 +124,10 @@ mod tests {
 
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        assert_eq!(response, [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 
     #[tokio::test]
@@ -276,7 +279,10 @@ mod tests {
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
         // Just returns no auth required for now
-        assert_eq!(response, [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 
     #[tokio::test]
@@ -297,6 +303,9 @@ mod tests {
 
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        assert_eq!(response, [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]);
+        assert_eq!(
+            response,
+            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+        );
     }
 }
