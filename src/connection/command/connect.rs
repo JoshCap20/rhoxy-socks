@@ -12,7 +12,7 @@ use crate::connection::command::send_reply;
 use crate::connection::request::SocksRequest;
 use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS};
 
-pub async fn handle_connect_command<R, W>(
+pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     client_reader: &mut BufReader<R>,

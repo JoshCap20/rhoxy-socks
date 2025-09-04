@@ -31,7 +31,7 @@ impl Command {
     {
         match self {
             Command::Connect => {
-                connect::handle_connect_command(
+                connect::handle_command(
                     client_request,
                     client_addr,
                     client_reader,
