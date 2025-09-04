@@ -1,8 +1,8 @@
 use std::{io, net::SocketAddr};
 
-use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
-use tracing::{error};
 use crate::connection::request::SocksRequest;
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use tracing::error;
 
 pub mod connect;
 

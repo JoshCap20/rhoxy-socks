@@ -1,6 +1,6 @@
+pub mod command;
 pub mod handshake;
 pub mod request;
-pub mod command;
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const ATYP_IPV4: u8 = 0x01;

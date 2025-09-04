@@ -6,7 +6,7 @@ use tokio::{
     io::{AsyncWriteExt, BufReader, BufWriter, copy},
     net::TcpStream,
 };
-use tracing::{debug};
+use tracing::debug;
 
 use crate::connection::request::SocksRequest;
 use crate::connection::{ATYP_IPV4, ATYP_IPV6, REPLY_SUCCESS, RESERVED, SOCKS5_VERSION};

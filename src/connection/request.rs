@@ -1,11 +1,7 @@
 use std::{io, net::SocketAddr};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::join;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter, copy},
-    net::TcpStream,
-};
+use tokio::io::{AsyncReadExt, BufReader, BufWriter};
 use tracing::{debug, error};
 
 use crate::connection::command::Command;
@@ -20,8 +16,6 @@ pub struct SocksRequest {
     pub dest_addr: std::net::IpAddr,
     pub dest_port: u16,
 }
-
-
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -117,14 +111,19 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let command: Command = Command::parse_command(client_request.command)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, format!("Invalid command from client {}", client_addr)))?;
-    
-    command.execute(client_request, client_addr, reader, writer).await?;
+    let command: Command = Command::parse_command(client_request.command).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid command from client {}", client_addr),
+        )
+    })?;
+
+    command
+        .execute(client_request, client_addr, reader, writer)
+        .await?;
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
