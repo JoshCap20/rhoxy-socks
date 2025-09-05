@@ -1,6 +1,5 @@
-use clap::Parser;
 use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
@@ -29,12 +28,13 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    start_server(server_addr).await?;
+    start_server(server_addr, Arc::new(config)).await?;
     Ok(())
 }
 
-async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
+async fn start_server(server_addr: std::net::SocketAddr, config: Arc<ProxyConfig>) -> io::Result<()> {
     info!("Starting server on {}", server_addr);
+    
     let listener: TcpListener = match TcpListener::bind(&server_addr).await {
         Ok(listener) => {
             info!("Server listening on {}", server_addr);
@@ -62,3 +62,4 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
         });
     }
 }
+
