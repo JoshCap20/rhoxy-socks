@@ -331,7 +331,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Reserved byte must be"));
+        assert!(err.to_string().contains("Invalid reserved byte"));
     }
 
     #[tokio::test]
@@ -350,7 +350,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5, got 4"));
+        assert!(err.to_string().contains("Invalid SOCKS version: 4"));
     }
 
     #[tokio::test]

@@ -80,10 +80,10 @@ mod command_tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::Unsupported);
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
         assert!(
             err.to_string()
-                .contains("BIND request handling not implemented")
+                .contains("broken pipe")
         );
     }
 
@@ -110,10 +110,10 @@ mod command_tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::Unsupported);
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
         assert!(
             err.to_string()
-                .contains("UDP ASSOCIATE request handling not implemented")
+                .contains("broken pipe")
         );
     }
 }
