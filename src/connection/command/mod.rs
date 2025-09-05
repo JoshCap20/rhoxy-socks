@@ -7,9 +7,6 @@ use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
 use crate::connection::{CommandResult, request::SocksRequest};
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Command {
@@ -70,5 +67,59 @@ impl Command {
             Command::Bind => "BIND",
             Command::UdpAssociate => "UDP_ASSOCIATE",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_command_parse_valid() {
+        assert_eq!(Command::parse_command(0x01), Some(Command::Connect));
+        assert_eq!(Command::parse_command(0x02), Some(Command::Bind));
+        assert_eq!(Command::parse_command(0x03), Some(Command::UdpAssociate));
+    }
+
+    #[test]
+    fn test_command_parse_invalid() {
+        assert_eq!(Command::parse_command(0x00), None);
+        assert_eq!(Command::parse_command(0x04), None);
+        assert_eq!(Command::parse_command(0xFF), None);
+    }
+
+    #[test]
+    fn test_command_name() {
+        assert_eq!(Command::Connect.name(), "CONNECT");
+        assert_eq!(Command::Bind.name(), "BIND");
+        assert_eq!(Command::UdpAssociate.name(), "UDP_ASSOCIATE");
+    }
+
+    #[test]
+    fn test_command_debug() {
+        assert!(format!("{:?}", Command::Connect).contains("Connect"));
+        assert!(format!("{:?}", Command::Bind).contains("Bind"));
+        assert!(format!("{:?}", Command::UdpAssociate).contains("UdpAssociate"));
+    }
+
+    #[test]
+    fn test_command_equality() {
+        assert_eq!(Command::Connect, Command::Connect);
+        assert_ne!(Command::Connect, Command::Bind);
+        assert_ne!(Command::Bind, Command::UdpAssociate);
+    }
+
+    #[test]
+    fn test_command_clone() {
+        let cmd = Command::Connect;
+        let cloned = cmd.clone();
+        assert_eq!(cmd, cloned);
+    }
+
+    #[test]
+    fn test_command_copy() {
+        let cmd = Command::Connect;
+        let copied = cmd;
+        assert_eq!(cmd, copied);
     }
 }
