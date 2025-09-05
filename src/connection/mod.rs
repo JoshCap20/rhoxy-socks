@@ -172,6 +172,7 @@ pub async fn send_reply<W>(
 where
     W: AsyncWrite + Unpin,
 {
+    // TODO: Single call with stack-allocated buffer
     writer.write_u8(SOCKS5_VERSION).await?;
     writer.write_u8(reply_code).await?;
     writer.write_u8(RESERVED).await?;
@@ -189,6 +190,8 @@ pub async fn send_socks_error_reply<W>(
 where
     W: AsyncWrite + Unpin,
 {
+    // CommandResult error reply does not use this
+    // but socks request parsing failures do
     let error_code = socks_error.to_reply_code();
     send_error_reply(writer, error_code).await
 }
@@ -228,12 +231,16 @@ impl CommandResult {
     where
         W: AsyncWrite + Unpin,
     {
-        let (addr_type, addr_bytes) = match self.bind_addr {
-            std::net::IpAddr::V4(ipv4) => (AddressType::IPV4, ipv4.octets().to_vec()),
-            std::net::IpAddr::V6(ipv6) => (AddressType::IPV6, ipv6.octets().to_vec()),
-        };
-
-        send_reply(writer, self.reply_code, addr_type, &addr_bytes, self.bind_port).await
+        match self.bind_addr {
+            std::net::IpAddr::V4(ipv4) => {
+                let addr_bytes = ipv4.octets();
+                send_reply(writer, self.reply_code, AddressType::IPV4, &addr_bytes, self.bind_port).await
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                let addr_bytes = ipv6.octets();
+                send_reply(writer, self.reply_code, AddressType::IPV6, &addr_bytes, self.bind_port).await
+            }
+        }
     }
 
     pub fn is_success(&self) -> bool {

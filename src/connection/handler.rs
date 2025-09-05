@@ -1,7 +1,6 @@
 use std::{io, net::SocketAddr};
 use tokio::{
     io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
-    join,
     net::TcpStream,
 };
 use tracing::debug;
@@ -47,13 +46,13 @@ where
                 "Invalid command {} from client {}",
                 client_request.command, client_addr
             );
-            let _ = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await;
+            if let Err(e) = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await {
+                debug!("Failed to send error reply to {}: {}", client_addr, e);
+                return Err(e);
+            }
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid command {} from client {}",
-                    client_request.command, client_addr
-                ),
+                "Unsupported SOCKS command",
             ));
         }
     };
@@ -82,14 +81,27 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let (mut target_reader, mut target_writer) = target_stream.into_split();
-    let (client_to_target, target_to_client) = join!(
-        copy(&mut *client_reader, &mut target_writer),
-        copy(&mut target_reader, &mut *client_writer)
-    );
+    if let Err(e) = target_stream.set_nodelay(true) {
+        debug!("Failed to set TCP_NODELAY: {}", e);
+    }
 
-    client_to_target?;
-    target_to_client?;
+    let (mut target_reader, mut target_writer) = target_stream.into_split();
+    
+    tokio::select! {
+        result = copy(&mut *client_reader, &mut target_writer) => {
+            if let Err(e) = result {
+                debug!("Client to target transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+        result = copy(&mut target_reader, &mut *client_writer) => {
+            if let Err(e) = result {
+                debug!("Target to client transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
+
     Ok(())
 }
 
