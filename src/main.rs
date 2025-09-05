@@ -66,19 +66,17 @@ async fn start_server(
             }
         };
 
-        let current_connections = active_connections.load(std::sync::atomic::Ordering::Relaxed);
+        let new_count = active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
 
-        if current_connections >= config.max_connections {
+        if new_count > config.max_connections {
+            active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             debug!(
                 "Connection limit reached ({}/{}), rejecting {}",
-                current_connections, config.max_connections, socket_addr
+                new_count - 1, config.max_connections, socket_addr
             );
             drop(socket);
             continue;
         }
-
-        active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let new_count = current_connections + 1;
 
         debug!(
             "Accepted connection from {} (active: {}/{})",
