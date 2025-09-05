@@ -29,13 +29,13 @@ pub async fn handle_connection(
     let mut writer = BufWriter::with_capacity(config.buffer_size, writer);
 
     let connection_future = async {
-        connection::handshake::perform_handshake(
+        connection::perform_handshake(
             &mut reader, 
             &mut writer, 
             client_addr, 
             &config.supported_auth_methods
         ).await?;
-        connection::handler::handle_request(
+        connection::request::SocksRequest::handle_request(
             &mut reader,
             &mut writer,
             client_addr,

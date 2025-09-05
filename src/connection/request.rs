@@ -1,9 +1,9 @@
-use std::io;
+use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
 use crate::connection::{
-    AddressType, RESERVED, SOCKS5_VERSION, SocksError, send_socks_error_reply,
+    handler::handle_client_request, send_socks_error_reply, AddressType, SocksError, RESERVED, SOCKS5_VERSION
 };
 
 #[derive(Debug)]
@@ -17,6 +17,29 @@ pub struct SocksRequest {
 }
 
 impl SocksRequest {
+    pub async fn handle_request<R, W>(
+        reader: &mut BufReader<R>,
+        writer: &mut BufWriter<W>,
+        client_addr: SocketAddr,
+        tcp_nodelay: bool,
+    ) -> io::Result<()>
+    where
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin,
+    {
+        debug!("Handling request from {}", client_addr);
+
+        let client_request = SocksRequest::parse_request(reader, writer).await?;
+        debug!(
+            "Parsed client request from {}: {:?}",
+            client_addr, client_request
+        );
+
+        handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay).await?;
+
+        Ok(())
+    }
+
     pub async fn parse_request<R, W>(
         reader: &mut BufReader<R>,
         writer: &mut BufWriter<W>,

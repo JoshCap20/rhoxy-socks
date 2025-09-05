@@ -7,30 +7,7 @@ use tracing::debug;
 
 use crate::connection::{command::Command, reply::Reply, request::SocksRequest, send_error_reply};
 
-pub async fn handle_request<R, W>(
-    reader: &mut BufReader<R>,
-    writer: &mut BufWriter<W>,
-    client_addr: SocketAddr,
-    tcp_nodelay: bool,
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
-{
-    debug!("Handling request from {}", client_addr);
-
-    let client_request = SocksRequest::parse_request(reader, writer).await?;
-    debug!(
-        "Parsed client request from {}: {:?}",
-        client_addr, client_request
-    );
-
-    handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay).await?;
-
-    Ok(())
-}
-
-async fn handle_client_request<R, W>(
+pub async fn handle_client_request<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     reader: &mut BufReader<R>,
