@@ -13,7 +13,6 @@ fn default_test_config() -> ConnectionConfig {
         buffer_size: 32 * 1024,
         tcp_nodelay: true,
         connection_timeout: std::time::Duration::from_secs(30),
-        bind_addr: None,
         metrics_enabled: false,
         supported_auth_methods: vec![Method::NO_AUTHENTICATION_REQUIRED],
         handshake_timeout: std::time::Duration::from_secs(30),
