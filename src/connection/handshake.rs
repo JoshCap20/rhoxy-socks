@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::debug;
 
-use crate::connection::method::MethodHandler;
+use crate::connection::method::method_handler::MethodHandler;
 
 pub async fn perform_handshake<R, W>(
     reader: &mut BufReader<R>,

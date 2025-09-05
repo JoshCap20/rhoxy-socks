@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 
-use crate::connection::method::Method;
+use crate::connection::method::method::Method;
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about = "SOCKS5 proxy", long_about = None)]

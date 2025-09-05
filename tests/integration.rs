@@ -1,4 +1,5 @@
-use rhoxy_socks::connection::method::Method;
+
+use rhoxy_socks::connection::method::method::Method;
 use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection, config::ConnectionConfig};
 use std::net::Ipv6Addr;
 use std::time::Duration;
