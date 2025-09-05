@@ -1,7 +1,6 @@
 use std::{io, net::SocketAddr};
 use tokio::{
     io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
-    join,
     net::TcpStream,
 };
 use tracing::debug;
@@ -87,13 +86,22 @@ where
     }
 
     let (mut target_reader, mut target_writer) = target_stream.into_split();
-    let (client_to_target, target_to_client) = join!(
-        copy(&mut *client_reader, &mut target_writer),
-        copy(&mut target_reader, &mut *client_writer)
-    );
+    
+    tokio::select! {
+        result = copy(&mut *client_reader, &mut target_writer) => {
+            if let Err(e) = result {
+                debug!("Client to target transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+        result = copy(&mut target_reader, &mut *client_writer) => {
+            if let Err(e) = result {
+                debug!("Target to client transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
 
-    client_to_target?;
-    target_to_client?;
     Ok(())
 }
 
