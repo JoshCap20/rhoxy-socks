@@ -69,6 +69,7 @@ impl SocksRequest {
         Ok(())
     }
 
+    // Public for testing, should find a better way
     pub async fn parse_request<R, W>(
         reader: &mut BufReader<R>,
         writer: &mut BufWriter<W>,

@@ -22,6 +22,9 @@ pub struct ProxyConfig {
     #[arg(long, default_value = "1000", help = "Maximum concurrent connections")]
     pub max_connections: usize,
 
+    #[arg(long, default_value = "30", help = "Handshake timeout in seconds")]
+    pub handshake_timeout: u64,
+
     #[arg(long, default_value = "60", help = "Connection timeout in seconds")]
     pub connection_timeout: u64,
 
@@ -84,10 +87,6 @@ impl ProxyConfig {
                 format!("Failed to resolve server address '{}': {}", addr_str, e),
             )),
         }
-    }
-
-    pub fn connection_timeout_duration(&self) -> Duration {
-        Duration::from_secs(self.connection_timeout)
     }
 
     pub fn keep_alive_duration(&self) -> Option<Duration> {
@@ -169,6 +168,7 @@ impl ProxyConfig {
         println!("Rhoxy SOCKS5 Proxy Configuration:");
         println!("   Server Address:      {}:{}", self.host, self.port);
         println!("   Max Connections:     {}", self.max_connections);
+        println!("   Handshake Timeout:  {}s", self.handshake_timeout);
         println!("   Connection Timeout:  {}s", self.connection_timeout);
         println!("   Buffer Size:         {}KB", self.buffer_size);
         println!("   TCP_NODELAY:         {}", self.tcp_nodelay);
@@ -195,6 +195,7 @@ pub struct ConnectionConfig {
     pub buffer_size: usize,
     pub tcp_nodelay: bool,
     pub keep_alive: Option<Duration>,
+    pub handshake_timeout: Duration,
     pub connection_timeout: Duration,
     pub bind_addr: Option<SocketAddr>,
     pub metrics_enabled: bool,
@@ -207,7 +208,8 @@ impl From<&ProxyConfig> for ConnectionConfig {
             buffer_size: config.buffer_size_bytes(),
             tcp_nodelay: config.tcp_nodelay,
             keep_alive: config.keep_alive_duration(),
-            connection_timeout: config.connection_timeout_duration(),
+            handshake_timeout: Duration::from_secs(config.handshake_timeout),
+            connection_timeout: Duration::from_secs(config.connection_timeout),
             bind_addr: config.bind_address(),
             metrics_enabled: config.metrics,
             supported_auth_methods: config.supported_auth_methods(),
@@ -226,6 +228,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
@@ -245,6 +248,7 @@ mod tests {
             port: 0,
             verbose: false,
             max_connections: 1000,
+            handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
@@ -264,6 +268,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
@@ -284,6 +289,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
@@ -296,6 +302,7 @@ mod tests {
         let conn_config = ConnectionConfig::from(&proxy_config);
         assert_eq!(conn_config.buffer_size, 32 * 1024);
         assert_eq!(conn_config.connection_timeout, Duration::from_secs(30));
+        assert_eq!(conn_config.handshake_timeout, Duration::from_secs(30));
         // assert_eq!(conn_config.keep_alive, Some(Duration::from_secs(60)));
     }
 
@@ -306,6 +313,7 @@ mod tests {
             port: 8080,
             verbose: false,
             max_connections: 1000,
+            handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
