@@ -5,8 +5,8 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::request::SocksRequest;
-use crate::connection::{CommandResult, SocksError};
+use crate::connection::{command::CommandResult, request::SocksRequest};
+use crate::connection::{SocksError};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
