@@ -19,7 +19,7 @@ pub struct ProxyConfig {
     #[arg(long, default_value = "1000", help = "Maximum concurrent connections")]
     pub max_connections: usize,
 
-    #[arg(long, default_value = "30", help = "Connection timeout in seconds")]
+    #[arg(long, default_value = "60", help = "Connection timeout in seconds")]
     pub connection_timeout: u64,
 
     #[arg(
