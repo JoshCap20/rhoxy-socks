@@ -78,13 +78,10 @@ mod command_tests {
             .execute(request, client_addr, &mut reader, &mut writer)
             .await;
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
-        assert!(
-            err.to_string()
-                .contains("broken pipe")
-        );
+        assert!(result.is_ok());
+        let command_result = result.unwrap();
+        assert!(!command_result.is_success());
+        assert_eq!(command_result.reply_code, crate::connection::Reply::COMMAND_NOT_SUPPORTED);
     }
 
     #[tokio::test]
@@ -108,12 +105,9 @@ mod command_tests {
             .execute(request, client_addr, &mut reader, &mut writer)
             .await;
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
-        assert!(
-            err.to_string()
-                .contains("broken pipe")
-        );
+        assert!(result.is_ok());
+        let command_result = result.unwrap();
+        assert!(!command_result.is_success());
+        assert_eq!(command_result.reply_code, crate::connection::Reply::COMMAND_NOT_SUPPORTED);
     }
 }

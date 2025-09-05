@@ -1,19 +1,18 @@
 use std::{io, net::SocketAddr};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
-    join,
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter},
     net::TcpStream,
 };
 use tracing::debug;
 
 use crate::connection::request::SocksRequest;
-use crate::connection::{AddressType, CommandResult, Reply, SocksError};
+use crate::connection::{CommandResult, SocksError};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    client_reader: &mut BufReader<R>,
-    client_writer: &mut BufWriter<W>,
+    _client_reader: &mut BufReader<R>,
+    _client_writer: &mut BufWriter<W>,
 ) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
@@ -52,7 +51,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{RESERVED, SOCKS5_VERSION};
+    use crate::connection::{RESERVED, SOCKS5_VERSION, send_reply, AddressType, Reply};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
