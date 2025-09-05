@@ -4,7 +4,7 @@ use tracing::{debug, error};
 
 use crate::connection::{
     AddressType, RESERVED, SOCKS5_VERSION, SocksError, command::Command,
-    handler::handle_data_transfer, reply::Reply, send_error_reply, send_socks_error_reply,
+    command::connect::handle_data_transfer, reply::Reply, send_error_reply, send_socks_error_reply,
 };
 
 #[derive(Debug)]
