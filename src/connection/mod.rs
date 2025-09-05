@@ -172,6 +172,7 @@ pub async fn send_reply<W>(
 where
     W: AsyncWrite + Unpin,
 {
+    // TODO: Single call with stack-allocated buffer
     writer.write_u8(SOCKS5_VERSION).await?;
     writer.write_u8(reply_code).await?;
     writer.write_u8(RESERVED).await?;
@@ -189,6 +190,8 @@ pub async fn send_socks_error_reply<W>(
 where
     W: AsyncWrite + Unpin,
 {
+    // CommandResult error reply does not use this
+    // but socks request parsing failures do
     let error_code = socks_error.to_reply_code();
     send_error_reply(writer, error_code).await
 }
