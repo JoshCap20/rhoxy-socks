@@ -198,6 +198,7 @@ pub struct ConnectionConfig {
     pub connection_timeout: Duration,
     pub bind_addr: Option<SocketAddr>,
     pub metrics_enabled: bool,
+    pub supported_auth_methods: Vec<u8>,
 }
 
 impl From<&ProxyConfig> for ConnectionConfig {
@@ -209,6 +210,7 @@ impl From<&ProxyConfig> for ConnectionConfig {
             connection_timeout: config.connection_timeout_duration(),
             bind_addr: config.bind_address(),
             metrics_enabled: config.metrics,
+            supported_auth_methods: config.supported_auth_methods(),
         }
     }
 }
