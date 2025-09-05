@@ -2,13 +2,19 @@ pub mod command;
 pub mod handler;
 pub mod handshake;
 pub mod request;
+pub mod error;
 
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
-use tracing::error;
+
+use crate::connection::error::SocksError;
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const RESERVED: u8 = 0x00;
+// Since socks5 still requires dest.addr and port lets use 0.0.0.0:0 for now
+// may want to set when error occurs in command though/post established connection
+pub const ERROR_ADDR: [u8; 4] = [0, 0, 0, 0];
+pub const ERROR_PORT: u16 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -78,7 +84,10 @@ impl AddressType {
         }
     }
 
-    pub async fn parse<R>(reader: &mut BufReader<R>, atyp: u8) -> io::Result<std::net::IpAddr>
+    pub async fn parse<R>(
+        reader: &mut BufReader<R>,
+        atyp: u8,
+    ) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
@@ -86,68 +95,62 @@ impl AddressType {
             Some(AddressType::IPv4) => Self::parse_ipv4(reader).await,
             Some(AddressType::DomainName) => Self::parse_domain_name(reader).await,
             Some(AddressType::IPv6) => Self::parse_ipv6(reader).await,
-            None => {
-                error!("Unsupported address type: {}", atyp);
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Unsupported address type",
-                ))
-            }
+            None => Err(SocksError::UnsupportedAddressType(atyp)),
         }
     }
 
-    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         let mut addr = [0u8; 4];
-        reader.read_exact(&mut addr).await?;
+        reader
+            .read_exact(&mut addr)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
         Ok(std::net::IpAddr::from(addr))
     }
 
-    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         let mut addr = [0u8; 16];
-        reader.read_exact(&mut addr).await?;
+        reader
+            .read_exact(&mut addr)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
         Ok(std::net::IpAddr::from(addr))
     }
 
-    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
-        let domain_len = reader.read_u8().await? as usize;
+        let domain_len = reader
+            .read_u8()
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))? as usize;
         if domain_len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Empty domain name",
-            ));
+            return Err(SocksError::EmptyDomainName);
         }
 
         let mut domain = vec![0u8; domain_len];
-        reader.read_exact(&mut domain).await?;
+        reader
+            .read_exact(&mut domain)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
 
-        let domain_str = String::from_utf8(domain).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
-        })?;
+        let domain_str =
+            String::from_utf8(domain).map_err(|_| SocksError::InvalidDomainNameEncoding)?;
 
-        let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("DNS resolution failed for {}: {}", domain_str, e),
-            )
-        })?;
+        let resolved_addrs = resolve_domain(&domain_str)
+            .await
+            .map_err(|_| SocksError::DnsResolutionFailed)?;
 
         let addr = resolved_addrs
             .get(0)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "No addresses resolved for domain",
-                )
-            })?
+            .ok_or(SocksError::NoAddressesResolved)?
             .ip();
 
         Ok(addr)
@@ -177,4 +180,77 @@ where
     writer.write_u16(port).await?;
     writer.flush().await?;
     Ok(())
+}
+
+pub async fn send_socks_error_reply<W>(
+    writer: &mut BufWriter<W>,
+    socks_error: &SocksError,
+) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    let error_code = socks_error.to_reply_code();
+    send_error_reply(writer, error_code).await
+}
+
+#[derive(Debug)]
+pub struct CommandResult {
+    pub reply_code: u8,
+    pub bind_addr: std::net::IpAddr,
+    pub bind_port: u16,
+    pub stream: Option<tokio::net::TcpStream>,
+}
+
+impl CommandResult {
+    pub fn success(bind_addr: std::net::IpAddr, bind_port: u16) -> Self {
+        Self {
+            reply_code: Reply::SUCCESS,
+            bind_addr,
+            bind_port,
+            stream: None,
+        }
+    }
+
+    pub fn error(reply_code: u8) -> Self {
+        Self {
+            reply_code,
+            bind_addr: std::net::IpAddr::from(ERROR_ADDR),
+            bind_port: ERROR_PORT,
+            stream: None,
+        }
+    }
+
+    pub fn from_socks_error(socks_error: &SocksError) -> Self {
+        Self::error(socks_error.to_reply_code())
+    }
+
+    pub async fn send_reply<W>(&self, writer: &mut BufWriter<W>) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let (addr_type, addr_bytes) = match self.bind_addr {
+            std::net::IpAddr::V4(ipv4) => (AddressType::IPV4, ipv4.octets().to_vec()),
+            std::net::IpAddr::V6(ipv6) => (AddressType::IPV6, ipv6.octets().to_vec()),
+        };
+
+        send_reply(writer, self.reply_code, addr_type, &addr_bytes, self.bind_port).await
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.reply_code == Reply::SUCCESS
+    }
+}
+
+pub async fn send_error_reply<W>(writer: &mut BufWriter<W>, error_code: u8) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    send_reply(
+        writer,
+        error_code,
+        AddressType::IPV4,
+        &ERROR_ADDR,
+        ERROR_PORT,
+    )
+    .await
 }

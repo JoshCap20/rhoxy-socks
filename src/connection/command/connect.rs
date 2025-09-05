@@ -1,20 +1,19 @@
 use std::{io, net::SocketAddr};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
-    join,
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter},
     net::TcpStream,
 };
 use tracing::debug;
 
 use crate::connection::request::SocksRequest;
-use crate::connection::{AddressType, Reply, send_reply};
+use crate::connection::{CommandResult, SocksError};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    client_reader: &mut BufReader<R>,
-    client_writer: &mut BufWriter<W>,
-) -> io::Result<()>
+    _client_reader: &mut BufReader<R>,
+    _client_writer: &mut BufWriter<W>,
+) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -25,7 +24,18 @@ where
     );
 
     let target_stream =
-        TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await?;
+        match TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                debug!(
+                    "[{client_addr}] Failed to connect to target {}:{}: {}",
+                    client_request.dest_addr, client_request.dest_port, e
+                );
+
+                let socks_error = SocksError::ConnectionFailed(e.kind());
+                return Ok(CommandResult::from_socks_error(&socks_error));
+            }
+        };
     debug!(
         "[{client_addr}] Connected to target {}:{}",
         client_request.dest_addr, client_request.dest_port
@@ -33,39 +43,15 @@ where
 
     let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
-    let destination_addr_type = if destination_addr.is_ipv4() {
-        AddressType::IPV4
-    } else {
-        AddressType::IPV6
-    };
-    let destination_addr_as_bytes = match destination_addr.ip() {
-        std::net::IpAddr::V4(addr) => addr.octets().to_vec(),
-        std::net::IpAddr::V6(addr) => addr.octets().to_vec(),
-    };
-
-    send_reply(
-        client_writer,
-        Reply::SUCCESS,
-        destination_addr_type,
-        &destination_addr_as_bytes,
-        destination_port,
-    )
-    .await?;
-
-    let (mut target_reader, mut target_writer) = target_stream.into_split();
-    let (client_to_target, target_to_client) = join!(
-        copy(&mut *client_reader, &mut target_writer),
-        copy(&mut target_reader, &mut *client_writer)
-    );
-
-    client_to_target?;
-    target_to_client?;
-    Ok(())
+    
+    let mut result = CommandResult::success(destination_addr.ip(), destination_port);
+    result.stream = Some(target_stream);
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{RESERVED, SOCKS5_VERSION};
+    use crate::connection::{RESERVED, SOCKS5_VERSION, send_reply, AddressType, Reply};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};

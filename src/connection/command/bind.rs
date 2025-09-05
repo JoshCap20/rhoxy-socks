@@ -2,14 +2,14 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::request::SocksRequest;
+use crate::connection::{Reply, request::SocksRequest, CommandResult};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    client_reader: &mut BufReader<R>,
-    client_writer: &mut BufWriter<W>,
-) -> io::Result<()>
+    _client_reader: &mut BufReader<R>,
+    _client_writer: &mut BufWriter<W>,
+) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -19,13 +19,6 @@ where
         client_request
     );
 
-    /// Need to send two replies
-    /// The first is sent after the server creates and binds a new socket.
-    /// The second reply occurs only after the anticipated incoming connection succeeds or fails.
-
     error!("[{client_addr}] BIND command is not supported");
-    return Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "BIND request handling not implemented",
-    ));
+    Ok(CommandResult::error(Reply::COMMAND_NOT_SUPPORTED))
 }

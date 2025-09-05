@@ -59,12 +59,13 @@ where
 }
 
 async fn handle_client_greeting<W>(
-    handshake_request: &HandshakeRequest,
+    _handshake_request: &HandshakeRequest,
     writer: &mut BufWriter<W>,
 ) -> io::Result<()>
 where
     W: AsyncWrite + Unpin,
 {
+    // TODO: Implement method negotation and those specific methods
     let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
     writer.write_all(&response).await?;
     writer.flush().await?;

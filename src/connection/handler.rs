@@ -1,8 +1,12 @@
 use std::{io, net::SocketAddr};
-use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
+    join,
+    net::TcpStream,
+};
 use tracing::debug;
 
-use crate::connection::{command::Command, request::SocksRequest};
+use crate::connection::{Reply, command::Command, request::SocksRequest, send_error_reply};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -36,23 +40,64 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let command: Command = Command::parse_command(client_request.command).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid command from client {}", client_addr),
-        )
-    })?;
+    let command: Command = match Command::parse_command(client_request.command) {
+        Some(cmd) => cmd,
+        None => {
+            debug!(
+                "Invalid command {} from client {}",
+                client_request.command, client_addr
+            );
+            let _ = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid command {} from client {}",
+                    client_request.command, client_addr
+                ),
+            ));
+        }
+    };
 
-    command
+    let result = command
         .execute(client_request, client_addr, reader, writer)
         .await?;
 
+    result.send_reply(writer).await?;
+
+    // If successful and has a stream (CONNECT command), handle data transfer
+    if result.is_success() && result.stream.is_some() {
+        let stream = result.stream.unwrap();
+        handle_data_transfer(reader, writer, stream).await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_data_transfer<R, W>(
+    client_reader: &mut BufReader<R>,
+    client_writer: &mut BufWriter<W>,
+    target_stream: TcpStream,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let (mut target_reader, mut target_writer) = target_stream.into_split();
+    let (client_to_target, target_to_client) = join!(
+        copy(&mut *client_reader, &mut target_writer),
+        copy(&mut target_reader, &mut *client_writer)
+    );
+
+    client_to_target?;
+    target_to_client?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, send_reply, command::Command};
+    use crate::connection::{
+        AddressType, RESERVED, Reply, SOCKS5_VERSION, command::Command, send_reply,
+    };
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
@@ -318,7 +363,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Reserved byte must be 0x00"));
+        assert!(err.to_string().contains("Invalid reserved byte"));
     }
 
     #[tokio::test]
@@ -337,7 +382,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5, got 4"));
+        assert!(err.to_string().contains("Invalid SOCKS version: 4"));
     }
 
     #[tokio::test]

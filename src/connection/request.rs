@@ -2,7 +2,9 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 use tracing::error;
 
-use crate::connection::{AddressType, RESERVED, SOCKS5_VERSION};
+use crate::connection::{
+    AddressType, RESERVED, SOCKS5_VERSION, SocksError, send_socks_error_reply,
+};
 
 #[derive(Debug)]
 pub struct SocksRequest {
@@ -15,34 +17,66 @@ pub struct SocksRequest {
 }
 
 impl SocksRequest {
-    pub async fn parse_request<R, W>(reader: &mut BufReader<R>, writer: &mut BufWriter<W>) -> io::Result<SocksRequest>
+    pub async fn parse_request<R, W>(
+        reader: &mut BufReader<R>,
+        writer: &mut BufWriter<W>,
+    ) -> io::Result<SocksRequest>
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        // TODO: Implement proper error responses
-        let version = reader.read_u8().await?;
+        let version = reader
+            .read_u8()
+            .await
+            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version"))?;
+
+        let command = reader
+            .read_u8()
+            .await
+            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command"))?;
+
+        let reserved = reader.read_u8().await.map_err(|_e| {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read reserved byte")
+        })?;
+
+        let address_type = reader.read_u8().await.map_err(|_e| {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read address type")
+        })?;
+
+        let dest_addr = match AddressType::parse(reader, address_type).await {
+            Ok(addr) => addr,
+            Err(socks_error) => {
+                error!("Failed to parse address: {:?}", socks_error);
+                let _ = send_socks_error_reply(writer, &socks_error).await;
+                return Err(socks_error.to_io_error());
+            }
+        };
+
+        let dest_port = reader.read_u16().await.map_err(|e| {
+            let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read port");
+            error!("Failed to read port: {}", e);
+            err
+        })?;
+
         if version != SOCKS5_VERSION {
-            error!("Invalid SOCKS version: {}", version);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
-            ));
+            error!(
+                "Invalid SOCKS version: expected {}, got {}",
+                SOCKS5_VERSION, version
+            );
+            let socks_error = SocksError::InvalidVersion(version);
+            let _ = send_socks_error_reply(writer, &socks_error).await;
+            return Err(socks_error.to_io_error());
         }
 
-        let command = reader.read_u8().await?;
-        let reserved = reader.read_u8().await?;
         if reserved != RESERVED {
-            error!("Invalid reserved byte: {}", reserved);
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Reserved byte must be 0x00",
-            ));
+            error!(
+                "Invalid reserved byte: expected {}, got {}",
+                RESERVED, reserved
+            );
+            let socks_error = SocksError::InvalidReservedByte(reserved);
+            let _ = send_socks_error_reply(writer, &socks_error).await;
+            return Err(socks_error.to_io_error());
         }
-
-        let address_type = reader.read_u8().await?;
-        let dest_addr = AddressType::parse(reader, address_type).await?;
-        let dest_port = reader.read_u16().await?;
 
         Ok(SocksRequest {
             version,
