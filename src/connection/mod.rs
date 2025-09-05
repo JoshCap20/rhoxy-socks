@@ -166,39 +166,34 @@ impl AddressType {
         R: AsyncRead + Unpin,
     {
         match AddressType::from_u8(atyp) {
-            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await.map_err(|e| SocksError::IoError(e.kind())),
-            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await.map_err(|e| {
-                let error_msg = e.to_string();
-                if error_msg.contains("DNS") || error_msg.contains("resolution") {
-                    SocksError::DnsResolutionFailed(error_msg)
-                } else if error_msg.contains("Empty domain name") {
-                    SocksError::InvalidDomainName("Empty domain name".to_string())
-                } else if error_msg.contains("Invalid domain name encoding") {
-                    SocksError::InvalidDomainName("Invalid encoding".to_string())
-                } else {
-                    SocksError::IoError(e.kind())
-                }
-            }),
-            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await.map_err(|e| SocksError::IoError(e.kind())),
-            None => Err(SocksError::UnsupportedAddressType(atyp))
+            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await,
+            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await,
+            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await,
+            None => Err(SocksError::UnsupportedAddressType(atyp)),
         }
     }
 
-    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         let mut addr = [0u8; 4];
-        reader.read_exact(&mut addr).await?;
+        reader
+            .read_exact(&mut addr)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
         Ok(std::net::IpAddr::from(addr))
     }
 
-    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         let mut addr = [0u8; 16];
-        reader.read_exact(&mut addr).await?;
+        reader
+            .read_exact(&mut addr)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
         Ok(std::net::IpAddr::from(addr))
     }
 
@@ -206,33 +201,29 @@ impl AddressType {
     where
         R: AsyncRead + Unpin,
     {
-        let domain_len = reader.read_u8().await? as usize;
+        let domain_len = reader
+            .read_u8()
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))? as usize;
         if domain_len == 0 {
-            return Err(SocksError::InvalidDomainName("Empty domain name".to_string()));
+            return Err(SocksError::EmptyDomainName);
         }
 
         let mut domain = vec![0u8; domain_len];
-        reader.read_exact(&mut domain).await?;
+        reader
+            .read_exact(&mut domain)
+            .await
+            .map_err(|e| SocksError::IoError(e.kind()))?;
 
-        let domain_str = String::from_utf8(domain).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
-        })?;
+        let domain_str = String::from_utf8(domain).map_err(|_| SocksError::InvalidDomainNameEncoding)?;
 
-        let resolved_addrs = resolve_domain(&domain_str).await.map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("DNS resolution failed for {}: {}", domain_str, e),
-            )
-        })?;
+        let resolved_addrs = resolve_domain(&domain_str)
+            .await
+            .map_err(|_| SocksError::DnsResolutionFailed)?;
 
         let addr = resolved_addrs
             .get(0)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "No addresses resolved for domain",
-                )
-            })?
+            .ok_or(SocksError::NoAddressesResolved)?
             .ip();
 
         Ok(addr)
