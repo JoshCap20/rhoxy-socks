@@ -1,7 +1,6 @@
 pub mod address_type;
 pub mod command;
 pub mod error;
-pub mod handler;
 pub mod method;
 pub mod reply;
 pub mod request;
