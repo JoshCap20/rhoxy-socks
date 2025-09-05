@@ -5,7 +5,7 @@ pub mod udp_associate;
 use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
-use crate::connection::request::SocksRequest;
+use crate::connection::{request::SocksRequest, CommandResult};
 
 #[cfg(test)]
 mod tests;
@@ -29,7 +29,7 @@ impl Command {
         client_addr: SocketAddr,
         client_reader: &mut BufReader<R>,
         client_writer: &mut BufWriter<W>,
-    ) -> io::Result<()>
+    ) -> io::Result<CommandResult>
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
@@ -37,11 +37,11 @@ impl Command {
         match self {
             Command::Connect => {
                 connect::handle_command(client_request, client_addr, client_reader, client_writer)
-                    .await?;
+                    .await
             }
             Command::Bind => {
                 bind::handle_command(client_request, client_addr, client_reader, client_writer)
-                    .await?;
+                    .await
             }
             Command::UdpAssociate => {
                 udp_associate::handle_command(
@@ -50,10 +50,9 @@ impl Command {
                     client_reader,
                     client_writer,
                 )
-                .await?;
+                .await
             }
         }
-        Ok(())
     }
 
     pub fn parse_command(command: u8) -> Option<Command> {
