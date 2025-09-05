@@ -66,10 +66,10 @@ impl SocksError {
                 io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
             }
             SocksError::DnsResolutionFailed => {
-                io::Error::new(io::ErrorKind::Other, "DNS resolution failed")
+                io::Error::other("DNS resolution failed")
             }
             SocksError::NoAddressesResolved => {
-                io::Error::new(io::ErrorKind::Other, "No addresses resolved for domain")
+                io::Error::other("No addresses resolved for domain")
             }
             SocksError::ConnectionFailed(kind) => io::Error::new(*kind, "Connection failed"),
             SocksError::InvalidData => io::Error::new(io::ErrorKind::InvalidData, "Invalid data"),

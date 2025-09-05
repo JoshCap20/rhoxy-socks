@@ -149,7 +149,7 @@ impl AddressType {
             .map_err(|_| SocksError::DnsResolutionFailed)?;
 
         let addr = resolved_addrs
-            .get(0)
+            .first()
             .ok_or(SocksError::NoAddressesResolved)?
             .ip();
 
