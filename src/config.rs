@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::{SocketAddr, ToSocketAddrs}, time::Duration};
 
 use clap::Parser;
 
@@ -65,13 +65,24 @@ impl ProxyConfig {
     }
 
     pub fn server_addr(&self) -> Result<SocketAddr, std::io::Error> {
+        if let Ok(addr) = format!("{}:{}", self.host, self.port).parse::<SocketAddr>() {
+            return Ok(addr);
+        }
+
         let addr_str = format!("{}:{}", self.host, self.port);
-        addr_str.parse().map_err(|e| {
+
+        match addr_str.to_socket_addrs() {
+            Ok(mut addrs) => addrs.next().ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid server address '{}': {}", addr_str, e),
-            )
-        })
+                    format!("No addresses found for '{}'", addr_str),
+                )
+            }),
+            Err(e) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Failed to resolve server address '{}': {}", addr_str, e),
+            )),
+        }
     }
 
     pub fn connection_timeout_duration(&self) -> Duration {
