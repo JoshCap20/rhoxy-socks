@@ -37,19 +37,19 @@ pub struct ProxyConfig {
     pub tcp_nodelay: bool,
 
     // Not implemented yet
-    #[arg(
-        long,
-        default_value = "60",
-        help = "TCP keep-alive timeout in seconds (0 to disable)"
-    )]
-    pub keep_alive: u64,
+    // #[arg(
+    //     long,
+    //     default_value = "60",
+    //     help = "TCP keep-alive timeout in seconds (0 to disable)"
+    // )]
+    // pub keep_alive: u64,
 
     #[arg(long, help = "Enable detailed connection metrics")]
     pub metrics: bool,
 
     // Not implemented yet
-    #[arg(long, help = "Local address to bind outgoing connections to")]
-    pub bind_addr: Option<String>,
+    // #[arg(long, help = "Local address to bind outgoing connections to")]
+    // pub bind_addr: Option<String>,
 
     #[arg(
         long,
@@ -79,11 +79,12 @@ impl ProxyConfig {
     }
 
     pub fn keep_alive_duration(&self) -> Option<Duration> {
-        if self.keep_alive > 0 {
-            Some(Duration::from_secs(self.keep_alive))
-        } else {
-            None
-        }
+        // if self.keep_alive > 0 {
+        //     Some(Duration::from_secs(self.keep_alive))
+        // } else {
+        //     None
+        // }
+        None
     }
 
     pub fn buffer_size_bytes(&self) -> usize {
@@ -91,7 +92,8 @@ impl ProxyConfig {
     }
 
     pub fn bind_address(&self) -> Option<SocketAddr> {
-        self.bind_addr.as_ref().and_then(|addr| addr.parse().ok())
+        // self.bind_addr.as_ref().and_then(|addr| addr.parse().ok())
+        None
     }
 
     pub fn supported_auth_methods(&self) -> Vec<u8> {
@@ -138,10 +140,10 @@ impl ProxyConfig {
             return Err("Buffer size cannot exceed 1024 KB".to_string());
         }
 
-        if let Some(ref addr) = self.bind_addr {
-            addr.parse::<SocketAddr>()
-                .map_err(|e| format!("Invalid bind address '{}': {}", addr, e))?;
-        }
+        // if let Some(ref addr) = self.bind_addr {
+        //     addr.parse::<SocketAddr>()
+        //         .map_err(|e| format!("Invalid bind address '{}': {}", addr, e))?;
+        // }
 
         let methods = self.supported_auth_methods();
         if methods.is_empty() {
@@ -158,21 +160,21 @@ impl ProxyConfig {
         println!("   Connection Timeout:  {}s", self.connection_timeout);
         println!("   Buffer Size:         {}KB", self.buffer_size);
         println!("   TCP_NODELAY:         {}", self.tcp_nodelay);
-        println!(
-            "   Keep-Alive:          {}s",
-            if self.keep_alive > 0 {
-                self.keep_alive.to_string()
-            } else {
-                "disabled".to_string()
-            }
-        );
+        // println!(
+        //     "   Keep-Alive:          {}s",
+        //     if self.keep_alive > 0 {
+        //         self.keep_alive.to_string()
+        //     } else {
+        //         "disabled".to_string()
+        //     }
+        // );
         println!("   Auth Methods:        {}", self.auth_methods);
         println!("   Metrics Enabled:     {}", self.metrics);
         println!("   Debug Logging:       {}", self.verbose);
 
-        if let Some(ref addr) = self.bind_addr {
-            println!("   Bind Address:        {}", addr);
-        }
+        // if let Some(ref addr) = self.bind_addr {
+        //     println!("   Bind Address:        {}", addr);
+        // }
     }
 }
 
@@ -213,9 +215,9 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            keep_alive: 60,
+            // keep_alive: 60,
             metrics: false,
-            bind_addr: None,
+            // bind_addr: None,
             auth_methods: "none".to_string(),
         };
 
@@ -232,9 +234,9 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            keep_alive: 60,
+            // keep_alive: 60,
             metrics: false,
-            bind_addr: None,
+            // bind_addr: None,
             auth_methods: "none".to_string(),
         };
 
@@ -251,9 +253,9 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            keep_alive: 60,
+            // keep_alive: 60,
             metrics: false,
-            bind_addr: None,
+            // bind_addr: None,
             auth_methods: "none".to_string(),
         };
 
@@ -271,16 +273,16 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            keep_alive: 60,
+            // keep_alive: 60,
             metrics: false,
-            bind_addr: None,
+            // bind_addr: None,
             auth_methods: "none".to_string(),
         };
 
         let conn_config = ConnectionConfig::from(&proxy_config);
         assert_eq!(conn_config.buffer_size, 32 * 1024);
         assert_eq!(conn_config.connection_timeout, Duration::from_secs(30));
-        assert_eq!(conn_config.keep_alive, Some(Duration::from_secs(60)));
+        // assert_eq!(conn_config.keep_alive, Some(Duration::from_secs(60)));
     }
 
     #[test]
@@ -293,9 +295,9 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            keep_alive: 60,
+            // keep_alive: 60,
             metrics: false,
-            bind_addr: None,
+            // bind_addr: None,
             auth_methods: "none".to_string(),
         };
 
