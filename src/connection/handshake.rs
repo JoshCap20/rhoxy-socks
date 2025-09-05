@@ -1,15 +1,8 @@
 use std::{io, net::SocketAddr};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
-use tracing::{debug, error};
+use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use tracing::debug;
 
-use crate::connection::{method::Method, SOCKS5_VERSION};
-
-#[derive(Debug)]
-pub struct HandshakeRequest {
-    pub version: u8,
-    pub nmethods: u8,
-    pub methods: Vec<u8>,
-}
+use crate::connection::method::MethodHandler;
 
 pub async fn perform_handshake<R, W>(
     reader: &mut BufReader<R>,
@@ -23,325 +16,89 @@ where
 {
     debug!("Performing handshake for client {}", client_addr);
 
-    let handshake_request = match parse_client_greeting(reader).await {
-        Ok(req) => req,
+    // Parse client greeting using the method handler
+    let client_greeting = match MethodHandler::parse_client_greeting(reader).await {
+        Ok(greeting) => greeting,
         Err(e) => {
-            debug!("Handshake parsing failed for {}: {}", client_addr, e);
+            debug!("Failed to parse client greeting from {}: {}", client_addr, e);
             return Err(e);
         }
     };
 
     debug!(
-        "Parsed client greeting for {}: {:?}",
-        client_addr, handshake_request
+        "Parsed client greeting from {}: version={}, methods={:?}",
+        client_addr, client_greeting.version, client_greeting.methods
     );
 
-    handle_client_greeting(&handshake_request, writer).await?;
-    debug!("Completed handshake for client {}", client_addr);
-
-    Ok(())
-}
-
-async fn parse_client_greeting<R>(reader: &mut BufReader<R>) -> io::Result<HandshakeRequest>
-where
-    R: AsyncRead + Unpin,
-{
-    let version = reader.read_u8().await?;
-    if version != SOCKS5_VERSION {
-        error!("Invalid SOCKS version: {}", version);
+    // Validate the greeting
+    if let Err(validation_error) = client_greeting.validate() {
+        debug!("Invalid client greeting from {}: {}", client_addr, validation_error);
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Invalid SOCKS version in handshake",
+            validation_error,
         ));
     }
-    let nmethods = reader.read_u8().await?;
 
-    let mut methods: Vec<u8> = vec![0; nmethods as usize];
-    reader.read_exact(&mut methods).await?;
+    // Handle method negotiation and authentication
+    let _selected_method = MethodHandler::handle_client_methods(
+        &client_greeting.methods,
+        server_methods,
+        writer,
+        client_addr,
+    ).await?;
 
-    Ok(HandshakeRequest {
-        version,
-        nmethods,
-        methods,
-    })
-}
-
-async fn handle_client_greeting<W>(
-    handshake_request: &HandshakeRequest,
-    writer: &mut BufWriter<W>,
-) -> io::Result<()>
-where
-    W: AsyncWrite + Unpin,
-{
-    if handshake_request
-        .methods
-        .contains(&Method::NO_AUTHENTICATION_REQUIRED)
-    {
-        let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
-        writer.write_all(&response).await?;
-        writer.flush().await?;
-        Ok(())
-    } else {
-        // TODO: Organize similar to command subdirectory for methods and refactor handling
-        error!("Client does not support no-authentication method");
-        let response = [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS];
-        writer.write_all(&response).await?;
-        writer.flush().await?;
-
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "No acceptable authentication methods",
-        ))
-    }
+    debug!("Completed handshake for client {}", client_addr);
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
 
     #[tokio::test]
-    async fn test_parse_client_greeting_valid() {
-        let (mut client, server) = tokio::io::duplex(1024);
+    async fn test_perform_handshake_success() {
+        let (mut client, server) = duplex(1024);
+        
+        // Client sends valid greeting with no-auth method
         client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
         client.flush().await.unwrap();
 
-        let mut reader = BufReader::new(server);
-        let request = parse_client_greeting(&mut reader)
-            .await
-            .expect("Should parse valid greeting");
-        assert_eq!(request.version, SOCKS5_VERSION);
-        assert_eq!(request.nmethods, 1);
-        assert_eq!(request.methods, vec![0x00]);
-    }
+        let (client_reader, mut client_writer) = tokio::io::split(client);
+        let (server_reader, server_writer) = tokio::io::split(server);
+        
+        let mut reader = BufReader::new(server_reader);
+        let mut writer = BufWriter::new(server_writer);
+        let client_addr = "127.0.0.1:8080".parse().unwrap();
+        let server_methods = vec![0x00]; // Support no-auth
 
-    #[tokio::test]
-    async fn test_parse_client_greeting_invalid_version() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x04, 0x01, 0x00]).await.unwrap();
-        client.flush().await.unwrap();
+        let result = perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
+        assert!(result.is_ok());
 
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(
-            err.to_string()
-                .contains("Invalid SOCKS version in handshake")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_handle_client_greeting_no_auth() {
-        let request = HandshakeRequest {
-            version: SOCKS5_VERSION,
-            nmethods: 1,
-            methods: vec![Method::NO_AUTHENTICATION_REQUIRED],
-        };
-
-        let (server, mut client) = tokio::io::duplex(1024);
-        let mut writer = BufWriter::new(server);
-
-        handle_client_greeting(&request, &mut writer)
-            .await
-            .expect("Should handle no-auth");
-        writer.flush().await.unwrap();
-
+        // Verify response
         let mut response = [0u8; 2];
-        client.read_exact(&mut response).await.unwrap();
-        assert_eq!(
-            response,
-            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
-        );
+        let mut client_reader = BufReader::new(client_reader);
+        client_reader.read_exact(&mut response).await.unwrap();
+        assert_eq!(response, [0x05, 0x00]); // SOCKS5, no-auth
     }
 
     #[tokio::test]
-    async fn test_parse_client_greeting_zero_methods() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x05, 0x00]).await.unwrap();
+    async fn test_perform_handshake_no_acceptable_methods() {
+        let (mut client, server) = duplex(1024);
+        
+        // Client sends greeting with only GSSAPI method
+        client.write_all(&[0x05, 0x01, 0x01]).await.unwrap();
         client.flush().await.unwrap();
 
-        let mut reader = BufReader::new(server);
-        let request = parse_client_greeting(&mut reader)
-            .await
-            .expect("Should parse zero methods");
-        assert_eq!(request.version, SOCKS5_VERSION);
-        assert_eq!(request.nmethods, 0);
-        assert_eq!(request.methods, Vec::<u8>::new());
-    }
+        let (client_reader, _) = tokio::io::split(client);
+        let (server_reader, server_writer) = tokio::io::split(server);
+        
+        let mut reader = BufReader::new(server_reader);
+        let mut writer = BufWriter::new(server_writer);
+        let client_addr = "127.0.0.1:8080".parse().unwrap();
+        let server_methods = vec![0x00]; // Only support no-auth
 
-    #[tokio::test]
-    async fn test_parse_client_greeting_multiple_methods() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client
-            .write_all(&[0x05, 0x03, 0x00, 0x01, 0x02])
-            .await
-            .unwrap();
-        client.flush().await.unwrap();
-
-        let mut reader = BufReader::new(server);
-        let request = parse_client_greeting(&mut reader)
-            .await
-            .expect("Should parse multiple methods");
-        assert_eq!(request.version, SOCKS5_VERSION);
-        assert_eq!(request.nmethods, 3);
-        assert_eq!(request.methods, vec![0x00, 0x01, 0x02]);
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_invalid_version_4() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x04, 0x01, 0x00]).await.unwrap();
-        client.flush().await.unwrap();
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
+        let result = perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(
-            err.to_string()
-                .contains("Invalid SOCKS version in handshake")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_version_zero() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x00, 0x01, 0x00]).await.unwrap();
-        client.flush().await.unwrap();
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(
-            err.to_string()
-                .contains("Invalid SOCKS version in handshake")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_version_six() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x06, 0x01, 0x00]).await.unwrap();
-        client.flush().await.unwrap();
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(
-            err.to_string()
-                .contains("Invalid SOCKS version in handshake")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_truncated_after_version() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x05]).await.unwrap();
-        client.flush().await.unwrap();
-        drop(client);
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_truncated_after_nmethods() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x05, 0x02]).await.unwrap();
-        client.flush().await.unwrap();
-        drop(client);
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_partial_methods() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        client.write_all(&[0x05, 0x03, 0x00, 0x01]).await.unwrap(); // Says 3 methods but only provides 2
-        client.flush().await.unwrap();
-        drop(client);
-
-        let mut reader = BufReader::new(server);
-        let result = parse_client_greeting(&mut reader).await;
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
-    }
-
-    #[tokio::test]
-    async fn test_parse_client_greeting_max_methods() {
-        let (mut client, server) = tokio::io::duplex(1024);
-        let mut data = vec![0x05, 0xFF]; // 255 methods
-        data.extend(vec![0x00; 255]); // All no-auth methods
-        client.write_all(&data).await.unwrap();
-        client.flush().await.unwrap();
-
-        let mut reader = BufReader::new(server);
-        let request = parse_client_greeting(&mut reader)
-            .await
-            .expect("Should handle max methods");
-        assert_eq!(request.nmethods, 255);
-        assert_eq!(request.methods.len(), 255);
-    }
-
-    #[tokio::test]
-    async fn test_handle_client_greeting_unsupported_methods() {
-        let request = HandshakeRequest {
-            version: SOCKS5_VERSION,
-            nmethods: 2,
-            methods: vec![0x01, 0x02], // GSSAPI and USERNAME/PASSWORD (not supported)
-        };
-
-        let (server, mut client) = tokio::io::duplex(1024);
-        let mut writer = BufWriter::new(server);
-
-        let result = handle_client_greeting(&request, &mut writer).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(
-            err.to_string()
-                .contains("No acceptable authentication methods")
-        );
-
-        writer.flush().await.unwrap();
-        let mut response = [0u8; 2];
-        client.read_exact(&mut response).await.unwrap();
-        assert_eq!(response, [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS]);
-    }
-
-    #[tokio::test]
-    async fn test_handle_client_greeting_mixed_methods() {
-        let request = HandshakeRequest {
-            version: SOCKS5_VERSION,
-            nmethods: 3,
-            methods: vec![0x01, 0x00, 0x02],
-        };
-
-        let (server, mut client) = tokio::io::duplex(1024);
-        let mut writer = BufWriter::new(server);
-
-        handle_client_greeting(&request, &mut writer)
-            .await
-            .expect("Should handle mixed methods");
-        writer.flush().await.unwrap();
-
-        let mut response = [0u8; 2];
-        client.read_exact(&mut response).await.unwrap();
-        assert_eq!(
-            response,
-            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
-        );
     }
 }
