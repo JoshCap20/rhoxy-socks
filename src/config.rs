@@ -22,14 +22,26 @@ pub struct ProxyConfig {
     #[arg(long, default_value = "30", help = "Connection timeout in seconds")]
     pub connection_timeout: u64,
 
-    #[arg(long, default_value = "32", help = "Buffer size for data transfers in KB")]
+    #[arg(
+        long,
+        default_value = "32",
+        help = "Buffer size for data transfers in KB"
+    )]
     pub buffer_size: usize,
 
-    #[arg(long, default_value = "true", help = "Enable TCP_NODELAY for low latency")]
+    #[arg(
+        long,
+        default_value = "true",
+        help = "Enable TCP_NODELAY for low latency"
+    )]
     pub tcp_nodelay: bool,
 
     // Not implemented yet
-    #[arg(long, default_value = "60", help = "TCP keep-alive timeout in seconds (0 to disable)")]
+    #[arg(
+        long,
+        default_value = "60",
+        help = "TCP keep-alive timeout in seconds (0 to disable)"
+    )]
     pub keep_alive: u64,
 
     #[arg(long, help = "Enable detailed connection metrics")]
@@ -39,7 +51,11 @@ pub struct ProxyConfig {
     #[arg(long, help = "Local address to bind outgoing connections to")]
     pub bind_addr: Option<String>,
 
-    #[arg(long, default_value = "none", help = "Comma-separated list of auth methods: none,userpass,gssapi")]
+    #[arg(
+        long,
+        default_value = "none",
+        help = "Comma-separated list of auth methods: none,userpass,gssapi"
+    )]
     pub auth_methods: String,
 }
 
@@ -80,7 +96,7 @@ impl ProxyConfig {
 
     pub fn supported_auth_methods(&self) -> Vec<u8> {
         let mut methods = Vec::new();
-        
+
         for method in self.auth_methods.split(',') {
             match method.trim().to_lowercase().as_str() {
                 "none" => methods.push(Method::NO_AUTHENTICATION_REQUIRED),
@@ -136,17 +152,24 @@ impl ProxyConfig {
     }
 
     pub fn display_summary(&self) {
-        println!("🚀 Rhoxy SOCKS5 Proxy Configuration:");
+        println!("Rhoxy SOCKS5 Proxy Configuration:");
         println!("   Server Address:      {}:{}", self.host, self.port);
         println!("   Max Connections:     {}", self.max_connections);
         println!("   Connection Timeout:  {}s", self.connection_timeout);
         println!("   Buffer Size:         {}KB", self.buffer_size);
         println!("   TCP_NODELAY:         {}", self.tcp_nodelay);
-        println!("   Keep-Alive:          {}s", if self.keep_alive > 0 { self.keep_alive.to_string() } else { "disabled".to_string() });
+        println!(
+            "   Keep-Alive:          {}s",
+            if self.keep_alive > 0 {
+                self.keep_alive.to_string()
+            } else {
+                "disabled".to_string()
+            }
+        );
         println!("   Auth Methods:        {}", self.auth_methods);
         println!("   Metrics Enabled:     {}", self.metrics);
         println!("   Debug Logging:       {}", self.verbose);
-        
+
         if let Some(ref addr) = self.bind_addr {
             println!("   Bind Address:        {}", addr);
         }

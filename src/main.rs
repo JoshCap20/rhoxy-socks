@@ -72,7 +72,9 @@ async fn start_server(
             active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             debug!(
                 "Connection limit reached ({}/{}), rejecting {}",
-                new_count - 1, config.max_connections, socket_addr
+                new_count - 1,
+                config.max_connections,
+                socket_addr
             );
             drop(socket);
             continue;

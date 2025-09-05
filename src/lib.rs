@@ -23,14 +23,20 @@ pub async fn handle_connection(
         }
     }
 
-    // TODO: Apply keep-alive 
+    // TODO: Apply keep-alive
     let (reader, writer) = stream.into_split();
     let mut reader = BufReader::with_capacity(config.buffer_size, reader);
     let mut writer = BufWriter::with_capacity(config.buffer_size, writer);
 
     let connection_future = async {
         connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
-        connection::handler::handle_request(&mut reader, &mut writer, client_addr, config.tcp_nodelay).await?;
+        connection::handler::handle_request(
+            &mut reader,
+            &mut writer,
+            client_addr,
+            config.tcp_nodelay,
+        )
+        .await?;
         Ok::<(), io::Error>(())
     };
 
