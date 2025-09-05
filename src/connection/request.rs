@@ -36,23 +36,6 @@ impl SocksRequest {
             client_addr, client_request
         );
 
-        Self::handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay)
-            .await?;
-
-        Ok(())
-    }
-
-    async fn handle_client_request<R, W>(
-        client_request: SocksRequest,
-        client_addr: SocketAddr,
-        reader: &mut BufReader<R>,
-        writer: &mut BufWriter<W>,
-        tcp_nodelay: bool,
-    ) -> io::Result<()>
-    where
-        R: AsyncRead + Unpin,
-        W: AsyncWrite + Unpin,
-    {
         let command: Command = match Command::parse_command(client_request.command) {
             Some(cmd) => cmd,
             None => {
