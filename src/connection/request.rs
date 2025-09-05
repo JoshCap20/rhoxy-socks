@@ -3,7 +3,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
 use crate::connection::{
-    handler::handle_client_request, send_socks_error_reply, AddressType, SocksError, RESERVED, SOCKS5_VERSION
+    AddressType, RESERVED, SOCKS5_VERSION, SocksError, command::Command,
+    handler::handle_data_transfer, reply::Reply, send_error_reply, send_socks_error_reply,
 };
 
 #[derive(Debug)]
@@ -35,7 +36,52 @@ impl SocksRequest {
             client_addr, client_request
         );
 
-        handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay).await?;
+        Self::handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn handle_client_request<R, W>(
+        client_request: SocksRequest,
+        client_addr: SocketAddr,
+        reader: &mut BufReader<R>,
+        writer: &mut BufWriter<W>,
+        tcp_nodelay: bool,
+    ) -> io::Result<()>
+    where
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin,
+    {
+        let command: Command = match Command::parse_command(client_request.command) {
+            Some(cmd) => cmd,
+            None => {
+                debug!(
+                    "Invalid command {} from client {}",
+                    client_request.command, client_addr
+                );
+                if let Err(e) = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await {
+                    debug!("Failed to send error reply to {}: {}", client_addr, e);
+                    return Err(e);
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Unsupported SOCKS command",
+                ));
+            }
+        };
+
+        let result = command
+            .execute(client_request, client_addr, reader, writer)
+            .await?;
+
+        result.send_reply(writer).await?;
+
+        // If successful and has a stream (CONNECT command), handle data transfer
+        if result.is_success() && result.stream.is_some() {
+            let stream = result.stream.unwrap();
+            handle_data_transfer(reader, writer, stream, tcp_nodelay).await?;
+        }
 
         Ok(())
     }
@@ -52,9 +98,11 @@ impl SocksRequest {
 
         let command = SocksRequest::read_u8_with_err(reader, "Failed to read command").await?;
 
-        let reserved = SocksRequest::read_u8_with_err(reader, "Failed to read reserved byte").await?;
+        let reserved =
+            SocksRequest::read_u8_with_err(reader, "Failed to read reserved byte").await?;
 
-        let address_type = SocksRequest::read_u8_with_err(reader, "Failed to read address type").await?;
+        let address_type =
+            SocksRequest::read_u8_with_err(reader, "Failed to read address type").await?;
 
         let dest_addr = match AddressType::parse(reader, address_type).await {
             Ok(addr) => addr,
@@ -111,6 +159,9 @@ impl SocksRequest {
     where
         R: AsyncRead + Unpin,
     {
-        reader.read_u8().await.map_err(|_| io::Error::new(io::ErrorKind::UnexpectedEof, err_msg))
+        reader
+            .read_u8()
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::UnexpectedEof, err_msg))
     }
 }

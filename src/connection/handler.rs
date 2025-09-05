@@ -1,57 +1,11 @@
-use std::{io, net::SocketAddr};
+use std::io;
 use tokio::{
     io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
     net::TcpStream,
 };
 use tracing::debug;
 
-use crate::connection::{command::Command, reply::Reply, request::SocksRequest, send_error_reply};
-
-pub async fn handle_client_request<R, W>(
-    client_request: SocksRequest,
-    client_addr: SocketAddr,
-    reader: &mut BufReader<R>,
-    writer: &mut BufWriter<W>,
-    tcp_nodelay: bool,
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
-{
-    let command: Command = match Command::parse_command(client_request.command) {
-        Some(cmd) => cmd,
-        None => {
-            debug!(
-                "Invalid command {} from client {}",
-                client_request.command, client_addr
-            );
-            if let Err(e) = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await {
-                debug!("Failed to send error reply to {}: {}", client_addr, e);
-                return Err(e);
-            }
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Unsupported SOCKS command",
-            ));
-        }
-    };
-
-    let result = command
-        .execute(client_request, client_addr, reader, writer)
-        .await?;
-
-    result.send_reply(writer).await?;
-
-    // If successful and has a stream (CONNECT command), handle data transfer
-    if result.is_success() && result.stream.is_some() {
-        let stream = result.stream.unwrap();
-        handle_data_transfer(reader, writer, stream, tcp_nodelay).await?;
-    }
-
-    Ok(())
-}
-
-async fn handle_data_transfer<R, W>(
+pub async fn handle_data_transfer<R, W>(
     client_reader: &mut BufReader<R>,
     client_writer: &mut BufWriter<W>,
     target_stream: TcpStream,
@@ -90,7 +44,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        AddressType, RESERVED, SOCKS5_VERSION, command::Command, reply::Reply, send_reply,
+        command::Command, reply::Reply, request::SocksRequest, send_reply, AddressType, RESERVED, SOCKS5_VERSION
     };
 
     use super::*;
