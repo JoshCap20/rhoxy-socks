@@ -1,3 +1,5 @@
+
+use rhoxy_socks::connection::method::method::Method;
 use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection, config::ConnectionConfig};
 use std::net::Ipv6Addr;
 use std::time::Duration;
@@ -14,6 +16,8 @@ fn default_test_config() -> ConnectionConfig {
         connection_timeout: std::time::Duration::from_secs(30),
         bind_addr: None,
         metrics_enabled: false,
+        supported_auth_methods: vec![Method::NO_AUTHENTICATION_REQUIRED],
+        handshake_timeout: std::time::Duration::from_secs(30),
     }
 }
 

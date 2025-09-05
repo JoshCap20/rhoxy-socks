@@ -6,7 +6,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
 use crate::connection::{
-    AddressType, ERROR_ADDR, ERROR_PORT, Reply, error::SocksError, request::SocksRequest,
+    AddressType, ERROR_ADDR, ERROR_PORT, error::SocksError, reply::Reply, request::SocksRequest,
     send_reply,
 };
 

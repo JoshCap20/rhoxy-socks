@@ -5,6 +5,7 @@ use std::io;
 use std::net::SocketAddr;
 use tokio::io::{BufReader, BufWriter};
 use tokio::net::TcpStream;
+use tokio::time::timeout;
 use tracing::debug;
 
 pub async fn handle_connection(
@@ -28,29 +29,49 @@ pub async fn handle_connection(
     let mut reader = BufReader::with_capacity(config.buffer_size, reader);
     let mut writer = BufWriter::with_capacity(config.buffer_size, writer);
 
-    let connection_future = async {
-        connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
-        connection::handler::handle_request(
+    match timeout(
+        config.handshake_timeout,
+        connection::perform_handshake(
+            &mut reader,
+            &mut writer,
+            client_addr,
+            &config.supported_auth_methods,
+        ),
+    )
+    .await
+    {
+        Ok(result) => result?,
+        Err(_) => {
+            debug!(
+                "Handshake timeout for {} after {:?}",
+                client_addr, config.handshake_timeout
+            );
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "Handshake timeout"));
+        }
+    }
+    match timeout(
+        config.connection_timeout,
+        connection::request::SocksRequest::handle_request(
             &mut reader,
             &mut writer,
             client_addr,
             config.tcp_nodelay,
-        )
-        .await?;
-        Ok::<(), io::Error>(())
-    };
-
-    match tokio::time::timeout(config.connection_timeout, connection_future).await {
-        Ok(result) => result,
+        ),
+    )
+    .await
+    {
+        Ok(result) => result?,
         Err(_) => {
             debug!(
                 "Connection {} timed out after {:?}",
                 client_addr, config.connection_timeout
             );
-            Err(io::Error::new(
+            return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!("Connection timed out after {:?}", config.connection_timeout),
-            ))
+            ));
         }
     }
+
+    Ok(())
 }

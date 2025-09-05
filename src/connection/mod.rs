@@ -1,160 +1,71 @@
+pub mod address_type;
 pub mod command;
 pub mod error;
-pub mod handler;
-pub mod handshake;
+pub mod method;
+pub mod reply;
 pub mod request;
 
-use std::io;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use std::{io, net::SocketAddr};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
+use tracing::debug;
 
-use crate::connection::error::SocksError;
+use crate::connection::{
+    address_type::AddressType, error::SocksError, method::method_handler::MethodHandler,
+};
 
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const RESERVED: u8 = 0x00;
-// Since socks5 still requires dest.addr and port lets use 0.0.0.0:0 for now
-// may want to set when error occurs in command though/post established connection
+// For errors prior to established connection (in which case command returns the host, port)
+// these are used for connection errors (i.e. dns failure in domain name translation)
 pub const ERROR_ADDR: [u8; 4] = [0, 0, 0, 0];
 pub const ERROR_PORT: u16 = 0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Method {
-    NoAuthenticationRequired = 0x00,
-    Gssapi = 0x01,
-    UsernamePassword = 0x02,
-    IanaAssigned = 0x03,
-    ReservedForPrivateMethods = 0x80,
-    NoAcceptableMethods = 0xFF,
-}
+pub async fn perform_handshake<R, W>(
+    reader: &mut BufReader<R>,
+    writer: &mut BufWriter<W>,
+    client_addr: SocketAddr,
+    server_methods: &[u8],
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    debug!("Performing handshake for client {}", client_addr);
 
-impl Method {
-    pub const NO_AUTHENTICATION_REQUIRED: u8 = Self::NoAuthenticationRequired as u8;
-    pub const GSSAPI: u8 = Self::Gssapi as u8;
-    pub const USERNAME_PASSWORD: u8 = Self::UsernamePassword as u8;
-    pub const IANA_ASSIGNED: u8 = Self::IanaAssigned as u8;
-    pub const RESERVED_FOR_PRIVATE_METHODS: u8 = Self::ReservedForPrivateMethods as u8;
-    pub const NO_ACCEPTABLE_METHODS: u8 = Self::NoAcceptableMethods as u8;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Reply {
-    Success = 0x00,
-    GeneralFailure = 0x01,
-    ConnectionNotAllowed = 0x02,
-    NetworkUnreachable = 0x03,
-    HostUnreachable = 0x04,
-    ConnectionRefused = 0x05,
-    TtlExpired = 0x06,
-    CommandNotSupported = 0x07,
-    AddressTypeNotSupported = 0x08,
-}
-
-impl Reply {
-    pub const SUCCESS: u8 = Self::Success as u8;
-    pub const GENERAL_FAILURE: u8 = Self::GeneralFailure as u8;
-    pub const CONNECTION_NOT_ALLOWED: u8 = Self::ConnectionNotAllowed as u8;
-    pub const NETWORK_UNREACHABLE: u8 = Self::NetworkUnreachable as u8;
-    pub const HOST_UNREACHABLE: u8 = Self::HostUnreachable as u8;
-    pub const CONNECTION_REFUSED: u8 = Self::ConnectionRefused as u8;
-    pub const TTL_EXPIRED: u8 = Self::TtlExpired as u8;
-    pub const COMMAND_NOT_SUPPORTED: u8 = Self::CommandNotSupported as u8;
-    pub const ADDRESS_TYPE_NOT_SUPPORTED: u8 = Self::AddressTypeNotSupported as u8;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum AddressType {
-    IPv4 = 0x01,
-    DomainName = 0x03,
-    IPv6 = 0x04,
-}
-
-impl AddressType {
-    pub const IPV4: u8 = Self::IPv4 as u8;
-    pub const DOMAIN_NAME: u8 = Self::DomainName as u8;
-    pub const IPV6: u8 = Self::IPv6 as u8;
-
-    pub fn from_u8(value: u8) -> Option<AddressType> {
-        match value {
-            Self::IPV4 => Some(AddressType::IPv4),
-            Self::DOMAIN_NAME => Some(AddressType::DomainName),
-            Self::IPV6 => Some(AddressType::IPv6),
-            _ => None,
+    let client_greeting = match MethodHandler::parse_client_greeting(reader).await {
+        Ok(greeting) => greeting,
+        Err(e) => {
+            debug!(
+                "Failed to parse client greeting from {}: {}",
+                client_addr, e
+            );
+            return Err(e);
         }
+    };
+
+    debug!(
+        "Parsed client greeting from {}: version={}, methods={:?}",
+        client_addr, client_greeting.version, client_greeting.methods
+    );
+
+    if let Err(validation_error) = client_greeting.validate() {
+        debug!(
+            "Invalid client greeting from {}: {}",
+            client_addr, validation_error
+        );
+        return Err(io::Error::new(io::ErrorKind::InvalidData, validation_error));
     }
 
-    pub async fn parse<R>(
-        reader: &mut BufReader<R>,
-        atyp: u8,
-    ) -> Result<std::net::IpAddr, SocksError>
-    where
-        R: AsyncRead + Unpin,
-    {
-        match AddressType::from_u8(atyp) {
-            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await,
-            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await,
-            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await,
-            None => Err(SocksError::UnsupportedAddressType(atyp)),
-        }
-    }
+    let _selected_method = MethodHandler::handle_client_methods(
+        &client_greeting.methods,
+        server_methods,
+        writer,
+        client_addr,
+    )
+    .await?;
 
-    async fn parse_ipv4<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let mut addr = [0u8; 4];
-        reader
-            .read_exact(&mut addr)
-            .await
-            .map_err(|e| SocksError::IoError(e.kind()))?;
-        Ok(std::net::IpAddr::from(addr))
-    }
-
-    async fn parse_ipv6<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let mut addr = [0u8; 16];
-        reader
-            .read_exact(&mut addr)
-            .await
-            .map_err(|e| SocksError::IoError(e.kind()))?;
-        Ok(std::net::IpAddr::from(addr))
-    }
-
-    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
-    where
-        R: AsyncRead + Unpin,
-    {
-        let domain_len = reader
-            .read_u8()
-            .await
-            .map_err(|e| SocksError::IoError(e.kind()))? as usize;
-        if domain_len == 0 {
-            return Err(SocksError::EmptyDomainName);
-        }
-
-        let mut domain = vec![0u8; domain_len];
-        reader
-            .read_exact(&mut domain)
-            .await
-            .map_err(|e| SocksError::IoError(e.kind()))?;
-
-        let domain_str =
-            String::from_utf8(domain).map_err(|_| SocksError::InvalidDomainNameEncoding)?;
-
-        let resolved_addrs = resolve_domain(&domain_str)
-            .await
-            .map_err(|_| SocksError::DnsResolutionFailed)?;
-
-        let addr = resolved_addrs
-            .first()
-            .ok_or(SocksError::NoAddressesResolved)?
-            .ip();
-
-        Ok(addr)
-    }
+    debug!("Completed handshake for client {}", client_addr);
+    Ok(())
 }
 
 async fn resolve_domain(domain: &str) -> io::Result<Vec<std::net::SocketAddr>> {
@@ -208,4 +119,58 @@ where
         ERROR_PORT,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
+
+    #[tokio::test]
+    async fn test_perform_handshake_success() {
+        let (mut client, server) = duplex(1024);
+
+        // Client sends valid greeting with no-auth method
+        client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
+        client.flush().await.unwrap();
+
+        let (client_reader, mut client_writer) = tokio::io::split(client);
+        let (server_reader, server_writer) = tokio::io::split(server);
+
+        let mut reader = BufReader::new(server_reader);
+        let mut writer = BufWriter::new(server_writer);
+        let client_addr = "127.0.0.1:8080".parse().unwrap();
+        let server_methods = vec![0x00]; // Support no-auth
+
+        let result =
+            perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
+        assert!(result.is_ok());
+
+        // Verify response
+        let mut response = [0u8; 2];
+        let mut client_reader = BufReader::new(client_reader);
+        client_reader.read_exact(&mut response).await.unwrap();
+        assert_eq!(response, [0x05, 0x00]); // SOCKS5, no-auth
+    }
+
+    #[tokio::test]
+    async fn test_perform_handshake_no_acceptable_methods() {
+        let (mut client, server) = duplex(1024);
+
+        // Client sends greeting with only GSSAPI method
+        client.write_all(&[0x05, 0x01, 0x01]).await.unwrap();
+        client.flush().await.unwrap();
+
+        let (client_reader, _) = tokio::io::split(client);
+        let (server_reader, server_writer) = tokio::io::split(server);
+
+        let mut reader = BufReader::new(server_reader);
+        let mut writer = BufWriter::new(server_writer);
+        let client_addr = "127.0.0.1:8080".parse().unwrap();
+        let server_methods = vec![0x00]; // Only support no-auth
+
+        let result =
+            perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
+        assert!(result.is_err());
+    }
 }

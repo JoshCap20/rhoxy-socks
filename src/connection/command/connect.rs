@@ -1,6 +1,6 @@
 use std::{io, net::SocketAddr};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, BufReader, BufWriter},
+    io::{copy, AsyncRead, AsyncWrite, BufReader, BufWriter},
     net::TcpStream,
 };
 use tracing::debug;
@@ -49,9 +49,45 @@ where
     Ok(result)
 }
 
+pub async fn handle_data_transfer<R, W>(
+    client_reader: &mut BufReader<R>,
+    client_writer: &mut BufWriter<W>,
+    target_stream: TcpStream,
+    tcp_nodelay: bool,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    if tcp_nodelay {
+        if let Err(e) = target_stream.set_nodelay(true) {
+            debug!("Failed to set TCP_NODELAY: {}", e);
+        }
+    }
+
+    let (mut target_reader, mut target_writer) = target_stream.into_split();
+
+    tokio::select! {
+        result = copy(&mut *client_reader, &mut target_writer) => {
+            if let Err(e) = result {
+                debug!("Client to target transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+        result = copy(&mut target_reader, &mut *client_writer) => {
+            if let Err(e) = result {
+                debug!("Target to client transfer failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, send_reply};
+    use crate::connection::{AddressType, RESERVED, SOCKS5_VERSION, reply::Reply, send_reply};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
