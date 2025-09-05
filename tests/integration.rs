@@ -1,10 +1,21 @@
-use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection};
+use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection, config::ConnectionConfig};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task;
 use tokio::time::timeout;
+
+fn default_test_config() -> ConnectionConfig {
+    ConnectionConfig {
+        buffer_size: 32 * 1024,
+        tcp_nodelay: true,
+        keep_alive: Some(std::time::Duration::from_secs(60)),
+        connection_timeout: std::time::Duration::from_secs(30),
+        bind_addr: None,
+        metrics_enabled: false,
+    }
+}
 
 #[tokio::test]
 async fn test_full_socks5_connect_ipv4() {
@@ -24,7 +35,7 @@ async fn test_full_socks5_connect_ipv4() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        handle_connection(socket, client_addr).await.unwrap();
+        handle_connection(socket, client_addr, default_test_config()).await.unwrap();
     });
 
     // Client: Connect to SOCKS, do handshake
@@ -83,7 +94,7 @@ async fn test_full_socks5_connect_ipv6() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        handle_connection(socket, client_addr).await.unwrap();
+        handle_connection(socket, client_addr, default_test_config()).await.unwrap();
     });
 
     // Client: Connect to SOCKS, do handshake
@@ -131,7 +142,7 @@ async fn test_connection_refused() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     // Client: Connect to SOCKS, do handshake
@@ -198,7 +209,7 @@ async fn test_concurrent_connections() {
         for _ in 0..3 {
             if let Ok((socket, client_addr)) = socks_listener.accept().await {
                 task::spawn(async move {
-                    let _ = handle_connection(socket, client_addr).await;
+                    let _ = handle_connection(socket, client_addr, default_test_config()).await;
                 });
             }
         }
@@ -266,7 +277,7 @@ async fn test_client_disconnect_during_handshake() {
 
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let result = handle_connection(socket, client_addr).await;
+        let result = handle_connection(socket, client_addr, default_test_config()).await;
         assert!(result.is_err()); // Should fail due to client disconnect
     });
 
@@ -284,7 +295,7 @@ async fn test_unsupported_bind_command() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     let mut client = TcpStream::connect(socks_addr).await.unwrap();
@@ -328,7 +339,7 @@ async fn test_unsupported_udp_associate_command() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     let mut client = TcpStream::connect(socks_addr).await.unwrap();
@@ -371,7 +382,7 @@ async fn test_malformed_handshake_too_few_bytes() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let result = handle_connection(socket, client_addr).await;
+        let result = handle_connection(socket, client_addr, default_test_config()).await;
         assert!(result.is_err()); // Should fail due to malformed handshake
     });
 
@@ -390,7 +401,7 @@ async fn test_malformed_request_invalid_address_type() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     let mut client = TcpStream::connect(socks_addr).await.unwrap();
@@ -433,7 +444,7 @@ async fn test_invalid_socks_version_in_handshake() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let result = handle_connection(socket, client_addr).await;
+        let result = handle_connection(socket, client_addr, default_test_config()).await;
         assert!(result.is_err()); // Should fail due to invalid version
     });
 
@@ -452,7 +463,7 @@ async fn test_invalid_socks_version_in_request() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     let mut client = TcpStream::connect(socks_addr).await.unwrap();
@@ -495,7 +506,7 @@ async fn test_client_disconnect_during_request() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let result = handle_connection(socket, client_addr).await;
+        let result = handle_connection(socket, client_addr, default_test_config()).await;
         assert!(result.is_err()); // Should fail due to client disconnect
     });
 
@@ -530,7 +541,7 @@ async fn test_zero_byte_transfer() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        let _ = handle_connection(socket, client_addr).await;
+        let _ = handle_connection(socket, client_addr, default_test_config()).await;
     });
 
     let mut client = TcpStream::connect(socks_addr).await.unwrap();

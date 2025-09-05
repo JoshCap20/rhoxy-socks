@@ -1,51 +1,43 @@
-use clap::Parser;
 use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[arg(long, default_value = "localhost")]
-    host: String,
-
-    #[arg(short, long, default_value = "1080", help = "Port to listen on")]
-    port: u16,
-
-    #[arg(long, help = "Enable debug logging")]
-    verbose: bool,
-}
+use rhoxy_socks::config::{ConnectionConfig, ProxyConfig};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let args: Args = Args::parse();
+    let config = ProxyConfig::from_args();
+
+    if let Err(e) = config.validate() {
+        eprintln!("Configuration error: {}", e);
+        std::process::exit(1);
+    }
 
     tracing_subscriber::fmt()
-        .with_max_level(if args.verbose {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        })
+        .with_max_level(config.tracing_level())
         .init();
 
-    let server_addr: String = format!("{}:{}", args.host, args.port);
-    let server_addr: SocketAddr = match server_addr.to_socket_addrs() {
-        Ok(mut addrs) => addrs.next().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "No valid socket address found")
-        })?,
+    config.display_summary();
+
+    let server_addr = match config.server_addr() {
+        Ok(addr) => addr,
         Err(e) => {
-            error!("Failed to resolve address {}: {}", server_addr, e);
+            error!("Failed to parse server address: {}", e);
             return Err(e);
         }
     };
 
-    start_server(server_addr).await?;
+    start_server(server_addr, Arc::new(config)).await?;
     Ok(())
 }
 
-async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
+async fn start_server(
+    server_addr: std::net::SocketAddr,
+    config: Arc<ProxyConfig>,
+) -> io::Result<()> {
     info!("Starting server on {}", server_addr);
+
     let listener: TcpListener = match TcpListener::bind(&server_addr).await {
         Ok(listener) => {
             info!("Server listening on {}", server_addr);
@@ -57,6 +49,14 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
         }
     };
 
+    let active_connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let connection_config = ConnectionConfig::from(config.as_ref());
+
+    info!(
+        "Ready to accept connections (max: {})",
+        config.max_connections
+    );
+
     loop {
         let (socket, socket_addr) = match listener.accept().await {
             Ok(result) => result,
@@ -65,10 +65,51 @@ async fn start_server(server_addr: SocketAddr) -> io::Result<()> {
                 continue;
             }
         };
-        debug!("Accepted connection from {}", socket_addr);
+
+        let new_count = active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+
+        if new_count > config.max_connections {
+            active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            debug!(
+                "Connection limit reached ({}/{}), rejecting {}",
+                new_count - 1,
+                config.max_connections,
+                socket_addr
+            );
+            drop(socket);
+            continue;
+        }
+
+        debug!(
+            "Accepted connection from {} (active: {}/{})",
+            socket_addr, new_count, config.max_connections
+        );
+        let conn_config = connection_config.clone();
+        let conn_counter = active_connections.clone();
         tokio::spawn(async move {
-            if let Err(e) = rhoxy_socks::handle_connection(socket, socket_addr).await {
-                error!("Connection error for {}: {}", socket_addr, e);
+            let result =
+                rhoxy_socks::handle_connection(socket, socket_addr, conn_config.clone()).await;
+
+            let prev_count = conn_counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
+            match result {
+                Ok(_) => {
+                    if conn_config.metrics_enabled {
+                        debug!(
+                            "Connection {} completed successfully (active: {})",
+                            socket_addr,
+                            prev_count - 1
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Connection error for {}: {} (active: {})",
+                        socket_addr,
+                        e,
+                        prev_count - 1
+                    );
+                }
             }
         });
     }

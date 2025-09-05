@@ -5,7 +5,10 @@ pub mod udp_associate;
 use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
-use crate::connection::{error::SocksError, request::SocksRequest, send_reply, AddressType, Reply, ERROR_ADDR, ERROR_PORT};
+use crate::connection::{
+    AddressType, ERROR_ADDR, ERROR_PORT, Reply, error::SocksError, request::SocksRequest,
+    send_reply,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
