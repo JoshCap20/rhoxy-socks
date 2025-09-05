@@ -193,6 +193,54 @@ where
     send_error_reply(writer, error_code).await
 }
 
+#[derive(Debug)]
+pub struct CommandResult {
+    pub reply_code: u8,
+    pub bind_addr: std::net::IpAddr,
+    pub bind_port: u16,
+    pub stream: Option<tokio::net::TcpStream>,
+}
+
+impl CommandResult {
+    pub fn success(bind_addr: std::net::IpAddr, bind_port: u16) -> Self {
+        Self {
+            reply_code: Reply::SUCCESS,
+            bind_addr,
+            bind_port,
+            stream: None,
+        }
+    }
+
+    pub fn error(reply_code: u8) -> Self {
+        Self {
+            reply_code,
+            bind_addr: std::net::IpAddr::from(ERROR_ADDR),
+            bind_port: ERROR_PORT,
+            stream: None,
+        }
+    }
+
+    pub fn from_socks_error(socks_error: &SocksError) -> Self {
+        Self::error(socks_error.to_reply_code())
+    }
+
+    pub async fn send_reply<W>(&self, writer: &mut BufWriter<W>) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let (addr_type, addr_bytes) = match self.bind_addr {
+            std::net::IpAddr::V4(ipv4) => (AddressType::IPV4, ipv4.octets().to_vec()),
+            std::net::IpAddr::V6(ipv6) => (AddressType::IPV6, ipv6.octets().to_vec()),
+        };
+
+        send_reply(writer, self.reply_code, addr_type, &addr_bytes, self.bind_port).await
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.reply_code == Reply::SUCCESS
+    }
+}
+
 pub async fn send_error_reply<W>(writer: &mut BufWriter<W>, error_code: u8) -> io::Result<()>
 where
     W: AsyncWrite + Unpin,
