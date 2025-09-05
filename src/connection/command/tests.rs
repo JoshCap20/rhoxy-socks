@@ -81,7 +81,10 @@ mod command_tests {
         assert!(result.is_ok());
         let command_result = result.unwrap();
         assert!(!command_result.is_success());
-        assert_eq!(command_result.reply_code, crate::connection::Reply::COMMAND_NOT_SUPPORTED);
+        assert_eq!(
+            command_result.reply_code,
+            crate::connection::Reply::COMMAND_NOT_SUPPORTED
+        );
     }
 
     #[tokio::test]
@@ -108,6 +111,9 @@ mod command_tests {
         assert!(result.is_ok());
         let command_result = result.unwrap();
         assert!(!command_result.is_success());
-        assert_eq!(command_result.reply_code, crate::connection::Reply::COMMAND_NOT_SUPPORTED);
+        assert_eq!(
+            command_result.reply_code,
+            crate::connection::Reply::COMMAND_NOT_SUPPORTED
+        );
     }
 }

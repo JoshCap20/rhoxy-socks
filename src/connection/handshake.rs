@@ -29,7 +29,7 @@ where
             return Err(e);
         }
     };
-    
+
     debug!(
         "Parsed client greeting for {}: {:?}",
         client_addr, handshake_request
@@ -50,7 +50,7 @@ where
         error!("Invalid SOCKS version: {}", version);
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Invalid SOCKS version in handshake"
+            "Invalid SOCKS version in handshake",
         ));
     }
     let nmethods = reader.read_u8().await?;
@@ -72,7 +72,10 @@ async fn handle_client_greeting<W>(
 where
     W: AsyncWrite + Unpin,
 {
-    if handshake_request.methods.contains(&Method::NO_AUTHENTICATION_REQUIRED) {
+    if handshake_request
+        .methods
+        .contains(&Method::NO_AUTHENTICATION_REQUIRED)
+    {
         let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
         writer.write_all(&response).await?;
         writer.flush().await?;
@@ -83,7 +86,7 @@ where
         let response = [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS];
         writer.write_all(&response).await?;
         writer.flush().await?;
-        
+
         Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "No acceptable authentication methods",
@@ -122,7 +125,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
+        assert!(
+            err.to_string()
+                .contains("Invalid SOCKS version in handshake")
+        );
     }
 
     #[tokio::test]
@@ -193,7 +199,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
+        assert!(
+            err.to_string()
+                .contains("Invalid SOCKS version in handshake")
+        );
     }
 
     #[tokio::test]
@@ -207,7 +216,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
+        assert!(
+            err.to_string()
+                .contains("Invalid SOCKS version in handshake")
+        );
     }
 
     #[tokio::test]
@@ -221,7 +233,10 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
+        assert!(
+            err.to_string()
+                .contains("Invalid SOCKS version in handshake")
+        );
     }
 
     #[tokio::test]
@@ -294,15 +309,15 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("No acceptable authentication methods"));
-        
+        assert!(
+            err.to_string()
+                .contains("No acceptable authentication methods")
+        );
+
         writer.flush().await.unwrap();
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        assert_eq!(
-            response,
-            [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS]
-        );
+        assert_eq!(response, [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS]);
     }
 
     #[tokio::test]

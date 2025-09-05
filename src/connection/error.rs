@@ -65,12 +65,8 @@ impl SocksError {
             SocksError::InvalidDomainNameEncoding => {
                 io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
             }
-            SocksError::DnsResolutionFailed => {
-                io::Error::other("DNS resolution failed")
-            }
-            SocksError::NoAddressesResolved => {
-                io::Error::other("No addresses resolved for domain")
-            }
+            SocksError::DnsResolutionFailed => io::Error::other("DNS resolution failed"),
+            SocksError::NoAddressesResolved => io::Error::other("No addresses resolved for domain"),
             SocksError::ConnectionFailed(kind) => io::Error::new(*kind, "Connection failed"),
             SocksError::InvalidData => io::Error::new(io::ErrorKind::InvalidData, "Invalid data"),
             SocksError::IoError(kind) => io::Error::new(*kind, "IO error"),
@@ -239,7 +235,11 @@ mod tests {
             let error = SocksError::UnsupportedAddressType(0xFF);
             let io_error = error.to_io_error();
             assert_eq!(io_error.kind(), io::ErrorKind::InvalidData);
-            assert!(io_error.to_string().contains("Unsupported address type: 255"));
+            assert!(
+                io_error
+                    .to_string()
+                    .contains("Unsupported address type: 255")
+            );
         }
 
         #[test]
@@ -263,7 +263,11 @@ mod tests {
             let error = SocksError::InvalidDomainNameEncoding;
             let io_error = error.to_io_error();
             assert_eq!(io_error.kind(), io::ErrorKind::InvalidData);
-            assert!(io_error.to_string().contains("Invalid domain name encoding"));
+            assert!(
+                io_error
+                    .to_string()
+                    .contains("Invalid domain name encoding")
+            );
         }
 
         #[test]
@@ -279,7 +283,11 @@ mod tests {
             let error = SocksError::NoAddressesResolved;
             let io_error = error.to_io_error();
             assert_eq!(io_error.kind(), io::ErrorKind::Other);
-            assert!(io_error.to_string().contains("No addresses resolved for domain"));
+            assert!(
+                io_error
+                    .to_string()
+                    .contains("No addresses resolved for domain")
+            );
         }
 
         #[test]
@@ -399,10 +407,22 @@ mod tests {
                 (SocksError::InvalidVersion(255), Reply::GENERAL_FAILURE),
                 (SocksError::InvalidReservedByte(0), Reply::GENERAL_FAILURE),
                 (SocksError::InvalidReservedByte(255), Reply::GENERAL_FAILURE),
-                (SocksError::UnsupportedAddressType(0), Reply::ADDRESS_TYPE_NOT_SUPPORTED),
-                (SocksError::UnsupportedAddressType(255), Reply::ADDRESS_TYPE_NOT_SUPPORTED),
-                (SocksError::UnsupportedCommand(0), Reply::COMMAND_NOT_SUPPORTED),
-                (SocksError::UnsupportedCommand(255), Reply::COMMAND_NOT_SUPPORTED),
+                (
+                    SocksError::UnsupportedAddressType(0),
+                    Reply::ADDRESS_TYPE_NOT_SUPPORTED,
+                ),
+                (
+                    SocksError::UnsupportedAddressType(255),
+                    Reply::ADDRESS_TYPE_NOT_SUPPORTED,
+                ),
+                (
+                    SocksError::UnsupportedCommand(0),
+                    Reply::COMMAND_NOT_SUPPORTED,
+                ),
+                (
+                    SocksError::UnsupportedCommand(255),
+                    Reply::COMMAND_NOT_SUPPORTED,
+                ),
             ];
 
             for (error, expected_reply) in boundary_tests {
@@ -416,17 +436,44 @@ mod tests {
         #[test]
         fn test_error_messages_are_descriptive() {
             let test_cases = vec![
-                (SocksError::InvalidVersion(4), vec!["Invalid", "SOCKS", "version", "4"]),
-                (SocksError::InvalidReservedByte(255), vec!["Invalid", "reserved", "byte", "255"]),
-                (SocksError::UnsupportedAddressType(10), vec!["Unsupported", "address", "type", "10"]),
-                (SocksError::UnsupportedCommand(99), vec!["Unsupported", "command", "99"]),
+                (
+                    SocksError::InvalidVersion(4),
+                    vec!["Invalid", "SOCKS", "version", "4"],
+                ),
+                (
+                    SocksError::InvalidReservedByte(255),
+                    vec!["Invalid", "reserved", "byte", "255"],
+                ),
+                (
+                    SocksError::UnsupportedAddressType(10),
+                    vec!["Unsupported", "address", "type", "10"],
+                ),
+                (
+                    SocksError::UnsupportedCommand(99),
+                    vec!["Unsupported", "command", "99"],
+                ),
                 (SocksError::EmptyDomainName, vec!["Empty", "domain", "name"]),
-                (SocksError::InvalidDomainNameEncoding, vec!["Invalid", "domain", "name", "encoding"]),
-                (SocksError::DnsResolutionFailed, vec!["DNS", "resolution", "failed"]),
-                (SocksError::NoAddressesResolved, vec!["No", "addresses", "resolved"]),
-                (SocksError::ConnectionFailed(io::ErrorKind::ConnectionRefused), vec!["Connection", "failed"]),
+                (
+                    SocksError::InvalidDomainNameEncoding,
+                    vec!["Invalid", "domain", "name", "encoding"],
+                ),
+                (
+                    SocksError::DnsResolutionFailed,
+                    vec!["DNS", "resolution", "failed"],
+                ),
+                (
+                    SocksError::NoAddressesResolved,
+                    vec!["No", "addresses", "resolved"],
+                ),
+                (
+                    SocksError::ConnectionFailed(io::ErrorKind::ConnectionRefused),
+                    vec!["Connection", "failed"],
+                ),
                 (SocksError::InvalidData, vec!["Invalid", "data"]),
-                (SocksError::IoError(io::ErrorKind::UnexpectedEof), vec!["IO", "error"]),
+                (
+                    SocksError::IoError(io::ErrorKind::UnexpectedEof),
+                    vec!["IO", "error"],
+                ),
             ];
 
             for (error, keywords) in test_cases {

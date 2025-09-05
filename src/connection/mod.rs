@@ -1,8 +1,8 @@
 pub mod command;
+pub mod error;
 pub mod handler;
 pub mod handshake;
 pub mod request;
-pub mod error;
 
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
@@ -234,11 +234,25 @@ impl CommandResult {
         match self.bind_addr {
             std::net::IpAddr::V4(ipv4) => {
                 let addr_bytes = ipv4.octets();
-                send_reply(writer, self.reply_code, AddressType::IPV4, &addr_bytes, self.bind_port).await
+                send_reply(
+                    writer,
+                    self.reply_code,
+                    AddressType::IPV4,
+                    &addr_bytes,
+                    self.bind_port,
+                )
+                .await
             }
             std::net::IpAddr::V6(ipv6) => {
                 let addr_bytes = ipv6.octets();
-                send_reply(writer, self.reply_code, AddressType::IPV6, &addr_bytes, self.bind_port).await
+                send_reply(
+                    writer,
+                    self.reply_code,
+                    AddressType::IPV6,
+                    &addr_bytes,
+                    self.bind_port,
+                )
+                .await
             }
         }
     }

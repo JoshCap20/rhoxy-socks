@@ -5,7 +5,7 @@ pub mod udp_associate;
 use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
-use crate::connection::{request::SocksRequest, CommandResult};
+use crate::connection::{CommandResult, request::SocksRequest};
 
 #[cfg(test)]
 mod tests;
