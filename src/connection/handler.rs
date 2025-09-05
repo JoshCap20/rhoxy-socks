@@ -47,13 +47,13 @@ where
                 "Invalid command {} from client {}",
                 client_request.command, client_addr
             );
-            let _ = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await;
+            if let Err(e) = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await {
+                debug!("Failed to send error reply to {}: {}", client_addr, e);
+                return Err(e);
+            }
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid command {} from client {}",
-                    client_request.command, client_addr
-                ),
+                "Unsupported SOCKS command",
             ));
         }
     };
