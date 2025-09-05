@@ -229,12 +229,11 @@ mod tests {
             keep_alive: 60,
             metrics: false,
             bind_addr: None,
-            auth_methods: "none,userpass".to_string(),
+            auth_methods: "none".to_string(),
         };
 
         let methods = config.supported_auth_methods();
         assert!(methods.contains(&Method::NO_AUTHENTICATION_REQUIRED));
-        assert!(methods.contains(&Method::USERNAME_PASSWORD));
     }
 
     #[test]

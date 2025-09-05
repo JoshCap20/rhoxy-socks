@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
-use rhoxy_socks::config::{ProxyConfig, ConnectionConfig};
+use rhoxy_socks::config::{ConnectionConfig, ProxyConfig};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -32,9 +32,12 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-async fn start_server(server_addr: std::net::SocketAddr, config: Arc<ProxyConfig>) -> io::Result<()> {
+async fn start_server(
+    server_addr: std::net::SocketAddr,
+    config: Arc<ProxyConfig>,
+) -> io::Result<()> {
     info!("Starting server on {}", server_addr);
-    
+
     let listener: TcpListener = match TcpListener::bind(&server_addr).await {
         Ok(listener) => {
             info!("Server listening on {}", server_addr);
@@ -46,6 +49,14 @@ async fn start_server(server_addr: std::net::SocketAddr, config: Arc<ProxyConfig
         }
     };
 
+    let active_connections = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let connection_config = ConnectionConfig::from(config.as_ref());
+
+    info!(
+        "Ready to accept connections (max: {})",
+        config.max_connections
+    );
+
     loop {
         let (socket, socket_addr) = match listener.accept().await {
             Ok(result) => result,
@@ -54,12 +65,52 @@ async fn start_server(server_addr: std::net::SocketAddr, config: Arc<ProxyConfig
                 continue;
             }
         };
-        debug!("Accepted connection from {}", socket_addr);
+
+        let current_connections = active_connections.load(std::sync::atomic::Ordering::Relaxed);
+
+        if current_connections >= config.max_connections {
+            debug!(
+                "Connection limit reached ({}/{}), rejecting {}",
+                current_connections, config.max_connections, socket_addr
+            );
+            drop(socket);
+            continue;
+        }
+
+        active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let new_count = current_connections + 1;
+
+        debug!(
+            "Accepted connection from {} (active: {}/{})",
+            socket_addr, new_count, config.max_connections
+        );
+        let conn_config = connection_config.clone();
+        let conn_counter = active_connections.clone();
         tokio::spawn(async move {
-            if let Err(e) = rhoxy_socks::handle_connection(socket, socket_addr).await {
-                error!("Connection error for {}: {}", socket_addr, e);
+            let result =
+                rhoxy_socks::handle_connection(socket, socket_addr, conn_config.clone()).await;
+
+            let prev_count = conn_counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
+            match result {
+                Ok(_) => {
+                    if conn_config.metrics_enabled {
+                        debug!(
+                            "Connection {} completed successfully (active: {})",
+                            socket_addr,
+                            prev_count - 1
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Connection error for {}: {} (active: {})",
+                        socket_addr,
+                        e,
+                        prev_count - 1
+                    );
+                }
             }
         });
     }
 }
-
