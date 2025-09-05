@@ -12,7 +12,6 @@ fn default_test_config() -> ConnectionConfig {
     ConnectionConfig {
         buffer_size: 32 * 1024,
         tcp_nodelay: true,
-        keep_alive: Some(std::time::Duration::from_secs(60)),
         connection_timeout: std::time::Duration::from_secs(30),
         bind_addr: None,
         metrics_enabled: false,

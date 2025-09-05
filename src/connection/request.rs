@@ -150,11 +150,11 @@ impl SocksRequest {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        command::Command, reply::Reply, request::SocksRequest, send_reply, AddressType, RESERVED, SOCKS5_VERSION
+        AddressType, RESERVED, SOCKS5_VERSION, command::Command, reply::Reply,
+        request::SocksRequest, send_reply,
     };
 
     use super::*;

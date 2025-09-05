@@ -42,13 +42,6 @@ pub struct ProxyConfig {
     )]
     pub tcp_nodelay: bool,
 
-    // Not implemented yet
-    // #[arg(
-    //     long,
-    //     default_value = "60",
-    //     help = "TCP keep-alive timeout in seconds (0 to disable)"
-    // )]
-    // pub keep_alive: u64,
     #[arg(long, help = "Enable detailed connection metrics")]
     pub metrics: bool,
 
@@ -87,15 +80,6 @@ impl ProxyConfig {
                 format!("Failed to resolve server address '{}': {}", addr_str, e),
             )),
         }
-    }
-
-    pub fn keep_alive_duration(&self) -> Option<Duration> {
-        // if self.keep_alive > 0 {
-        //     Some(Duration::from_secs(self.keep_alive))
-        // } else {
-        //     None
-        // }
-        None
     }
 
     pub fn buffer_size_bytes(&self) -> usize {
@@ -172,14 +156,6 @@ impl ProxyConfig {
         println!("   Connection Timeout:  {}s", self.connection_timeout);
         println!("   Buffer Size:         {}KB", self.buffer_size);
         println!("   TCP_NODELAY:         {}", self.tcp_nodelay);
-        // println!(
-        //     "   Keep-Alive:          {}s",
-        //     if self.keep_alive > 0 {
-        //         self.keep_alive.to_string()
-        //     } else {
-        //         "disabled".to_string()
-        //     }
-        // );
         println!("   Auth Methods:        {}", self.auth_methods);
         println!("   Metrics Enabled:     {}", self.metrics);
         println!("   Debug Logging:       {}", self.verbose);
@@ -194,7 +170,6 @@ impl ProxyConfig {
 pub struct ConnectionConfig {
     pub buffer_size: usize,
     pub tcp_nodelay: bool,
-    pub keep_alive: Option<Duration>,
     pub handshake_timeout: Duration,
     pub connection_timeout: Duration,
     pub bind_addr: Option<SocketAddr>,
@@ -207,7 +182,6 @@ impl From<&ProxyConfig> for ConnectionConfig {
         Self {
             buffer_size: config.buffer_size_bytes(),
             tcp_nodelay: config.tcp_nodelay,
-            keep_alive: config.keep_alive_duration(),
             handshake_timeout: Duration::from_secs(config.handshake_timeout),
             connection_timeout: Duration::from_secs(config.connection_timeout),
             bind_addr: config.bind_address(),
