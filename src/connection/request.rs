@@ -2,7 +2,9 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 use tracing::error;
 
-use crate::connection::{send_socks_error_reply, AddressType, RESERVED, SOCKS5_VERSION, SocksError};
+use crate::connection::{
+    AddressType, RESERVED, SOCKS5_VERSION, SocksError, send_socks_error_reply,
+};
 
 #[derive(Debug)]
 pub struct SocksRequest {
@@ -15,18 +17,23 @@ pub struct SocksRequest {
 }
 
 impl SocksRequest {
-    pub async fn parse_request<R, W>(reader: &mut BufReader<R>, writer: &mut BufWriter<W>) -> io::Result<SocksRequest>
+    pub async fn parse_request<R, W>(
+        reader: &mut BufReader<R>,
+        writer: &mut BufWriter<W>,
+    ) -> io::Result<SocksRequest>
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        let version = reader.read_u8().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version")
-        })?;
+        let version = reader
+            .read_u8()
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version"))?;
 
-        let command = reader.read_u8().await.map_err(|e| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command")
-        })?;
+        let command = reader
+            .read_u8()
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command"))?;
 
         let reserved = reader.read_u8().await.map_err(|e| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read reserved byte")
@@ -52,14 +59,20 @@ impl SocksRequest {
         })?;
 
         if version != SOCKS5_VERSION {
-            error!("Invalid SOCKS version: expected {}, got {}", SOCKS5_VERSION, version);
+            error!(
+                "Invalid SOCKS version: expected {}, got {}",
+                SOCKS5_VERSION, version
+            );
             let socks_error = SocksError::InvalidVersion(version);
             let _ = send_socks_error_reply(writer, &socks_error).await;
             return Err(socks_error.to_io_error());
         }
 
         if reserved != RESERVED {
-            error!("Invalid reserved byte: expected {}, got {}", RESERVED, reserved);
+            error!(
+                "Invalid reserved byte: expected {}, got {}",
+                RESERVED, reserved
+            );
             let socks_error = SocksError::InvalidReservedByte(reserved);
             let _ = send_socks_error_reply(writer, &socks_error).await;
             return Err(socks_error.to_io_error());

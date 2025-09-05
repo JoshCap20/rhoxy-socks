@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::debug;
 
-use crate::connection::{command::Command, request::SocksRequest, send_error_reply, Reply};
+use crate::connection::{Reply, command::Command, request::SocksRequest, send_error_reply};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -39,11 +39,17 @@ where
     let command: Command = match Command::parse_command(client_request.command) {
         Some(cmd) => cmd,
         None => {
-            debug!("Invalid command {} from client {}", client_request.command, client_addr);
+            debug!(
+                "Invalid command {} from client {}",
+                client_request.command, client_addr
+            );
             let _ = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await;
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("Invalid command {} from client {}", client_request.command, client_addr),
+                format!(
+                    "Invalid command {} from client {}",
+                    client_request.command, client_addr
+                ),
             ));
         }
     };
@@ -57,7 +63,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, send_reply, command::Command};
+    use crate::connection::{
+        AddressType, RESERVED, Reply, SOCKS5_VERSION, command::Command, send_reply,
+    };
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};

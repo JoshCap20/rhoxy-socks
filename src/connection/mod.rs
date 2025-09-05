@@ -64,22 +64,18 @@ impl SocksError {
                 io::ErrorKind::InvalidData,
                 format!("Unsupported command: {}", c),
             ),
-            SocksError::EmptyDomainName => io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Empty domain name",
-            ),
-            SocksError::InvalidDomainNameEncoding => io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid domain name encoding",
-            ),
-            SocksError::DnsResolutionFailed => io::Error::new(
-                io::ErrorKind::Other,
-                "DNS resolution failed",
-            ),
-            SocksError::NoAddressesResolved => io::Error::new(
-                io::ErrorKind::Other,
-                "No addresses resolved for domain",
-            ),
+            SocksError::EmptyDomainName => {
+                io::Error::new(io::ErrorKind::InvalidData, "Empty domain name")
+            }
+            SocksError::InvalidDomainNameEncoding => {
+                io::Error::new(io::ErrorKind::InvalidData, "Invalid domain name encoding")
+            }
+            SocksError::DnsResolutionFailed => {
+                io::Error::new(io::ErrorKind::Other, "DNS resolution failed")
+            }
+            SocksError::NoAddressesResolved => {
+                io::Error::new(io::ErrorKind::Other, "No addresses resolved for domain")
+            }
             SocksError::ConnectionFailed(kind) => io::Error::new(*kind, "Connection failed"),
             SocksError::InvalidData => io::Error::new(io::ErrorKind::InvalidData, "Invalid data"),
             SocksError::IoError(kind) => io::Error::new(*kind, "IO error"),
@@ -161,7 +157,10 @@ impl AddressType {
         }
     }
 
-    pub async fn parse<R>(reader: &mut BufReader<R>, atyp: u8) -> Result<std::net::IpAddr, SocksError>
+    pub async fn parse<R>(
+        reader: &mut BufReader<R>,
+        atyp: u8,
+    ) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
@@ -215,7 +214,8 @@ impl AddressType {
             .await
             .map_err(|e| SocksError::IoError(e.kind()))?;
 
-        let domain_str = String::from_utf8(domain).map_err(|_| SocksError::InvalidDomainNameEncoding)?;
+        let domain_str =
+            String::from_utf8(domain).map_err(|_| SocksError::InvalidDomainNameEncoding)?;
 
         let resolved_addrs = resolve_domain(&domain_str)
             .await
@@ -255,7 +255,10 @@ where
     Ok(())
 }
 
-pub async fn send_socks_error_reply<W>(writer: &mut BufWriter<W>, socks_error: &SocksError) -> io::Result<()>
+pub async fn send_socks_error_reply<W>(
+    writer: &mut BufWriter<W>,
+    socks_error: &SocksError,
+) -> io::Result<()>
 where
     W: AsyncWrite + Unpin,
 {

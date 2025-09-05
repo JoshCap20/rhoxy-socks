@@ -7,7 +7,7 @@ use tokio::{
 use tracing::debug;
 
 use crate::connection::request::SocksRequest;
-use crate::connection::{AddressType, Reply, send_reply};
+use crate::connection::{AddressType, Reply, send_error_reply, send_reply};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
@@ -25,7 +25,27 @@ where
     );
 
     let target_stream =
-        TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await?;
+        match TcpStream::connect((client_request.dest_addr, client_request.dest_port)).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                debug!(
+                    "[{client_addr}] Failed to connect to target {}:{}: {}",
+                    client_request.dest_addr, client_request.dest_port, e
+                );
+
+                let error_code = match e.kind() {
+                    io::ErrorKind::ConnectionRefused => Reply::CONNECTION_REFUSED,
+                    io::ErrorKind::TimedOut => Reply::HOST_UNREACHABLE,
+                    io::ErrorKind::AddrNotAvailable => Reply::HOST_UNREACHABLE,
+                    io::ErrorKind::NetworkUnreachable => Reply::NETWORK_UNREACHABLE,
+                    io::ErrorKind::PermissionDenied => Reply::CONNECTION_NOT_ALLOWED,
+                    _ => Reply::GENERAL_FAILURE,
+                };
+
+                let _ = send_error_reply(client_writer, error_code).await;
+                return Err(e);
+            }
+        };
     debug!(
         "[{client_addr}] Connected to target {}:{}",
         client_request.dest_addr, client_request.dest_port
