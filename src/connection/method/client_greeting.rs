@@ -1,5 +1,7 @@
-use crate::connection::{method::{method::Method, method_handler::MethodHandler}, SOCKS5_VERSION};
-
+use crate::connection::{
+    SOCKS5_VERSION,
+    method::{method::Method, method_handler::MethodHandler},
+};
 
 #[derive(Debug, Clone)]
 pub struct ClientGreeting {

@@ -19,7 +19,10 @@ where
     let client_greeting = match MethodHandler::parse_client_greeting(reader).await {
         Ok(greeting) => greeting,
         Err(e) => {
-            debug!("Failed to parse client greeting from {}: {}", client_addr, e);
+            debug!(
+                "Failed to parse client greeting from {}: {}",
+                client_addr, e
+            );
             return Err(e);
         }
     };
@@ -30,11 +33,11 @@ where
     );
 
     if let Err(validation_error) = client_greeting.validate() {
-        debug!("Invalid client greeting from {}: {}", client_addr, validation_error);
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            validation_error,
-        ));
+        debug!(
+            "Invalid client greeting from {}: {}",
+            client_addr, validation_error
+        );
+        return Err(io::Error::new(io::ErrorKind::InvalidData, validation_error));
     }
 
     let _selected_method = MethodHandler::handle_client_methods(
@@ -42,7 +45,8 @@ where
         server_methods,
         writer,
         client_addr,
-    ).await?;
+    )
+    .await?;
 
     debug!("Completed handshake for client {}", client_addr);
     Ok(())
@@ -51,25 +55,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{duplex, AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
 
     #[tokio::test]
     async fn test_perform_handshake_success() {
         let (mut client, server) = duplex(1024);
-        
+
         // Client sends valid greeting with no-auth method
         client.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
         client.flush().await.unwrap();
 
         let (client_reader, mut client_writer) = tokio::io::split(client);
         let (server_reader, server_writer) = tokio::io::split(server);
-        
+
         let mut reader = BufReader::new(server_reader);
         let mut writer = BufWriter::new(server_writer);
         let client_addr = "127.0.0.1:8080".parse().unwrap();
         let server_methods = vec![0x00]; // Support no-auth
 
-        let result = perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
+        let result =
+            perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
         assert!(result.is_ok());
 
         // Verify response
@@ -82,20 +87,21 @@ mod tests {
     #[tokio::test]
     async fn test_perform_handshake_no_acceptable_methods() {
         let (mut client, server) = duplex(1024);
-        
+
         // Client sends greeting with only GSSAPI method
         client.write_all(&[0x05, 0x01, 0x01]).await.unwrap();
         client.flush().await.unwrap();
 
         let (client_reader, _) = tokio::io::split(client);
         let (server_reader, server_writer) = tokio::io::split(server);
-        
+
         let mut reader = BufReader::new(server_reader);
         let mut writer = BufWriter::new(server_writer);
         let client_addr = "127.0.0.1:8080".parse().unwrap();
         let server_methods = vec![0x00]; // Only support no-auth
 
-        let result = perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
+        let result =
+            perform_handshake(&mut reader, &mut writer, client_addr, &server_methods).await;
         assert!(result.is_err());
     }
 }
