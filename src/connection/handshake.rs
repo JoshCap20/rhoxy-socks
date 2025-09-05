@@ -65,6 +65,7 @@ async fn handle_client_greeting<W>(
 where
     W: AsyncWrite + Unpin,
 {
+    // TODO: Implement method negotation and those specific methods
     let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
     writer.write_all(&response).await?;
     writer.flush().await?;
