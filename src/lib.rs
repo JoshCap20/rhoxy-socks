@@ -1,4 +1,5 @@
 pub mod connection;
+pub mod config;
 
 use std::io;
 use std::net::SocketAddr;
