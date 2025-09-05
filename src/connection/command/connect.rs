@@ -7,14 +7,14 @@ use tokio::{
 use tracing::debug;
 
 use crate::connection::request::SocksRequest;
-use crate::connection::{AddressType, Reply, send_error_reply, send_reply};
+use crate::connection::{AddressType, CommandResult, Reply, SocksError};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     client_reader: &mut BufReader<R>,
     client_writer: &mut BufWriter<W>,
-) -> io::Result<()>
+) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -33,17 +33,8 @@ where
                     client_request.dest_addr, client_request.dest_port, e
                 );
 
-                let error_code = match e.kind() {
-                    io::ErrorKind::ConnectionRefused => Reply::CONNECTION_REFUSED,
-                    io::ErrorKind::TimedOut => Reply::HOST_UNREACHABLE,
-                    io::ErrorKind::AddrNotAvailable => Reply::HOST_UNREACHABLE,
-                    io::ErrorKind::NetworkUnreachable => Reply::NETWORK_UNREACHABLE,
-                    io::ErrorKind::PermissionDenied => Reply::CONNECTION_NOT_ALLOWED,
-                    _ => Reply::GENERAL_FAILURE,
-                };
-
-                let _ = send_error_reply(client_writer, error_code).await;
-                return Err(e);
+                let socks_error = SocksError::ConnectionFailed(e.kind());
+                return Ok(CommandResult::from_socks_error(&socks_error));
             }
         };
     debug!(
@@ -53,34 +44,10 @@ where
 
     let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
-    let destination_addr_type = if destination_addr.is_ipv4() {
-        AddressType::IPV4
-    } else {
-        AddressType::IPV6
-    };
-    let destination_addr_as_bytes = match destination_addr.ip() {
-        std::net::IpAddr::V4(addr) => addr.octets().to_vec(),
-        std::net::IpAddr::V6(addr) => addr.octets().to_vec(),
-    };
-
-    send_reply(
-        client_writer,
-        Reply::SUCCESS,
-        destination_addr_type,
-        &destination_addr_as_bytes,
-        destination_port,
-    )
-    .await?;
-
-    let (mut target_reader, mut target_writer) = target_stream.into_split();
-    let (client_to_target, target_to_client) = join!(
-        copy(&mut *client_reader, &mut target_writer),
-        copy(&mut target_reader, &mut *client_writer)
-    );
-
-    client_to_target?;
-    target_to_client?;
-    Ok(())
+    
+    let mut result = CommandResult::success(destination_addr.ip(), destination_port);
+    result.stream = Some(target_stream);
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -1,5 +1,9 @@
 use std::{io, net::SocketAddr};
-use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
+    join,
+    net::TcpStream,
+};
 use tracing::debug;
 
 use crate::connection::{Reply, command::Command, request::SocksRequest, send_error_reply};
@@ -54,10 +58,38 @@ where
         }
     };
 
-    command
+    let result = command
         .execute(client_request, client_addr, reader, writer)
         .await?;
 
+    result.send_reply(writer).await?;
+
+    // If successful and has a stream (CONNECT command), handle data transfer
+    if result.is_success() && result.stream.is_some() {
+        let stream = result.stream.unwrap();
+        handle_data_transfer(reader, writer, stream).await?;
+    }
+
+    Ok(())
+}
+
+async fn handle_data_transfer<R, W>(
+    client_reader: &mut BufReader<R>,
+    client_writer: &mut BufWriter<W>,
+    target_stream: TcpStream,
+) -> io::Result<()>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let (mut target_reader, mut target_writer) = target_stream.into_split();
+    let (client_to_target, target_to_client) = join!(
+        copy(&mut *client_reader, &mut target_writer),
+        copy(&mut target_reader, &mut *client_writer)
+    );
+
+    client_to_target?;
+    target_to_client?;
     Ok(())
 }
 

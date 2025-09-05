@@ -2,14 +2,14 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::{Reply, request::SocksRequest, send_error_reply};
+use crate::connection::{Reply, request::SocksRequest, CommandResult};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     _client_reader: &mut BufReader<R>,
-    client_writer: &mut BufWriter<W>,
-) -> io::Result<()>
+    _client_writer: &mut BufWriter<W>,
+) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -19,11 +19,6 @@ where
         client_request
     );
 
-    send_error_reply(client_writer, Reply::COMMAND_NOT_SUPPORTED).await?;
-
     error!("[{client_addr}] BIND command is not supported");
-    return Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "BIND request handling not implemented",
-    ));
+    Ok(CommandResult::error(Reply::COMMAND_NOT_SUPPORTED))
 }
