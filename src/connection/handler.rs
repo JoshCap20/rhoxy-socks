@@ -86,7 +86,7 @@ where
     }
 
     let (mut target_reader, mut target_writer) = target_stream.into_split();
-    
+
     tokio::select! {
         result = copy(&mut *client_reader, &mut target_writer) => {
             if let Err(e) = result {

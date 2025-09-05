@@ -5,10 +5,7 @@ pub mod udp_associate;
 use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 
-use crate::connection::{request::SocksRequest, CommandResult};
-
-#[cfg(test)]
-mod tests;
+use crate::connection::{error::SocksError, request::SocksRequest, send_reply, AddressType, Reply, ERROR_ADDR, ERROR_PORT};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -70,5 +67,125 @@ impl Command {
             Command::Bind => "BIND",
             Command::UdpAssociate => "UDP_ASSOCIATE",
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct CommandResult {
+    pub reply_code: u8,
+    pub bind_addr: std::net::IpAddr,
+    pub bind_port: u16,
+    pub stream: Option<tokio::net::TcpStream>,
+}
+
+impl CommandResult {
+    pub fn success(bind_addr: std::net::IpAddr, bind_port: u16) -> Self {
+        Self {
+            reply_code: Reply::SUCCESS,
+            bind_addr,
+            bind_port,
+            stream: None,
+        }
+    }
+
+    pub fn error(reply_code: u8) -> Self {
+        Self {
+            reply_code,
+            bind_addr: std::net::IpAddr::from(ERROR_ADDR),
+            bind_port: ERROR_PORT,
+            stream: None,
+        }
+    }
+
+    pub fn from_socks_error(socks_error: &SocksError) -> Self {
+        Self::error(socks_error.to_reply_code())
+    }
+
+    pub async fn send_reply<W>(&self, writer: &mut BufWriter<W>) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        match self.bind_addr {
+            std::net::IpAddr::V4(ipv4) => {
+                let addr_bytes = ipv4.octets();
+                send_reply(
+                    writer,
+                    self.reply_code,
+                    AddressType::IPV4,
+                    &addr_bytes,
+                    self.bind_port,
+                )
+                .await
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                let addr_bytes = ipv6.octets();
+                send_reply(
+                    writer,
+                    self.reply_code,
+                    AddressType::IPV6,
+                    &addr_bytes,
+                    self.bind_port,
+                )
+                .await
+            }
+        }
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.reply_code == Reply::SUCCESS
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_command_parse_valid() {
+        assert_eq!(Command::parse_command(0x01), Some(Command::Connect));
+        assert_eq!(Command::parse_command(0x02), Some(Command::Bind));
+        assert_eq!(Command::parse_command(0x03), Some(Command::UdpAssociate));
+    }
+
+    #[test]
+    fn test_command_parse_invalid() {
+        assert_eq!(Command::parse_command(0x00), None);
+        assert_eq!(Command::parse_command(0x04), None);
+        assert_eq!(Command::parse_command(0xFF), None);
+    }
+
+    #[test]
+    fn test_command_name() {
+        assert_eq!(Command::Connect.name(), "CONNECT");
+        assert_eq!(Command::Bind.name(), "BIND");
+        assert_eq!(Command::UdpAssociate.name(), "UDP_ASSOCIATE");
+    }
+
+    #[test]
+    fn test_command_debug() {
+        assert!(format!("{:?}", Command::Connect).contains("Connect"));
+        assert!(format!("{:?}", Command::Bind).contains("Bind"));
+        assert!(format!("{:?}", Command::UdpAssociate).contains("UdpAssociate"));
+    }
+
+    #[test]
+    fn test_command_equality() {
+        assert_eq!(Command::Connect, Command::Connect);
+        assert_ne!(Command::Connect, Command::Bind);
+        assert_ne!(Command::Bind, Command::UdpAssociate);
+    }
+
+    #[test]
+    fn test_command_clone() {
+        let cmd = Command::Connect;
+        let cloned = cmd.clone();
+        assert_eq!(cmd, cloned);
+    }
+
+    #[test]
+    fn test_command_copy() {
+        let cmd = Command::Connect;
+        let copied = cmd;
+        assert_eq!(cmd, copied);
     }
 }

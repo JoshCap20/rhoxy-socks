@@ -1,8 +1,8 @@
 pub mod command;
+pub mod error;
 pub mod handler;
 pub mod handshake;
 pub mod request;
-pub mod error;
 
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
@@ -149,7 +149,7 @@ impl AddressType {
             .map_err(|_| SocksError::DnsResolutionFailed)?;
 
         let addr = resolved_addrs
-            .get(0)
+            .first()
             .ok_or(SocksError::NoAddressesResolved)?
             .ip();
 
@@ -194,58 +194,6 @@ where
     // but socks request parsing failures do
     let error_code = socks_error.to_reply_code();
     send_error_reply(writer, error_code).await
-}
-
-#[derive(Debug)]
-pub struct CommandResult {
-    pub reply_code: u8,
-    pub bind_addr: std::net::IpAddr,
-    pub bind_port: u16,
-    pub stream: Option<tokio::net::TcpStream>,
-}
-
-impl CommandResult {
-    pub fn success(bind_addr: std::net::IpAddr, bind_port: u16) -> Self {
-        Self {
-            reply_code: Reply::SUCCESS,
-            bind_addr,
-            bind_port,
-            stream: None,
-        }
-    }
-
-    pub fn error(reply_code: u8) -> Self {
-        Self {
-            reply_code,
-            bind_addr: std::net::IpAddr::from(ERROR_ADDR),
-            bind_port: ERROR_PORT,
-            stream: None,
-        }
-    }
-
-    pub fn from_socks_error(socks_error: &SocksError) -> Self {
-        Self::error(socks_error.to_reply_code())
-    }
-
-    pub async fn send_reply<W>(&self, writer: &mut BufWriter<W>) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
-        match self.bind_addr {
-            std::net::IpAddr::V4(ipv4) => {
-                let addr_bytes = ipv4.octets();
-                send_reply(writer, self.reply_code, AddressType::IPV4, &addr_bytes, self.bind_port).await
-            }
-            std::net::IpAddr::V6(ipv6) => {
-                let addr_bytes = ipv6.octets();
-                send_reply(writer, self.reply_code, AddressType::IPV6, &addr_bytes, self.bind_port).await
-            }
-        }
-    }
-
-    pub fn is_success(&self) -> bool {
-        self.reply_code == Reply::SUCCESS
-    }
 }
 
 pub async fn send_error_reply<W>(writer: &mut BufWriter<W>, error_code: u8) -> io::Result<()>

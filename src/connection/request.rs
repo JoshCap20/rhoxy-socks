@@ -1,6 +1,6 @@
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, BufReader, BufWriter};
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::connection::{
     AddressType, RESERVED, SOCKS5_VERSION, SocksError, send_socks_error_reply,
@@ -47,7 +47,9 @@ impl SocksRequest {
             Ok(addr) => addr,
             Err(socks_error) => {
                 error!("Failed to parse address: {:?}", socks_error);
-                let _ = send_socks_error_reply(writer, &socks_error).await;
+                if let Err(write_err) = send_socks_error_reply(writer, &socks_error).await {
+                    debug!("Failed to send address parsing error reply: {}", write_err);
+                }
                 return Err(socks_error.to_io_error());
             }
         };
@@ -64,7 +66,9 @@ impl SocksRequest {
                 SOCKS5_VERSION, version
             );
             let socks_error = SocksError::InvalidVersion(version);
-            let _ = send_socks_error_reply(writer, &socks_error).await;
+            if let Err(write_err) = send_socks_error_reply(writer, &socks_error).await {
+                debug!("Failed to send version error reply: {}", write_err);
+            }
             return Err(socks_error.to_io_error());
         }
 
@@ -74,7 +78,9 @@ impl SocksRequest {
                 RESERVED, reserved
             );
             let socks_error = SocksError::InvalidReservedByte(reserved);
-            let _ = send_socks_error_reply(writer, &socks_error).await;
+            if let Err(write_err) = send_socks_error_reply(writer, &socks_error).await {
+                debug!("Failed to send reserved byte error reply: {}", write_err);
+            }
             return Err(socks_error.to_io_error());
         }
 

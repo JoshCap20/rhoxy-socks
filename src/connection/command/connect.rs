@@ -5,8 +5,8 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::request::SocksRequest;
-use crate::connection::{CommandResult, SocksError};
+use crate::connection::{command::CommandResult, request::SocksRequest};
+use crate::connection::{SocksError};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
@@ -43,7 +43,7 @@ where
 
     let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
-    
+
     let mut result = CommandResult::success(destination_addr.ip(), destination_port);
     result.stream = Some(target_stream);
     Ok(result)
@@ -51,7 +51,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::connection::{RESERVED, SOCKS5_VERSION, send_reply, AddressType, Reply};
+    use crate::connection::{AddressType, RESERVED, Reply, SOCKS5_VERSION, send_reply};
 
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
