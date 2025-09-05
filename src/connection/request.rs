@@ -25,23 +25,13 @@ impl SocksRequest {
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        let version = reader
-            .read_u8()
-            .await
-            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version"))?;
+        let version = SocksRequest::read_u8_with_err(reader, "Failed to read version").await?;
 
-        let command = reader
-            .read_u8()
-            .await
-            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command"))?;
+        let command = SocksRequest::read_u8_with_err(reader, "Failed to read command").await?;
 
-        let reserved = reader.read_u8().await.map_err(|_e| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read reserved byte")
-        })?;
+        let reserved = SocksRequest::read_u8_with_err(reader, "Failed to read reserved byte").await?;
 
-        let address_type = reader.read_u8().await.map_err(|_e| {
-            io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read address type")
-        })?;
+        let address_type = SocksRequest::read_u8_with_err(reader, "Failed to read address type").await?;
 
         let dest_addr = match AddressType::parse(reader, address_type).await {
             Ok(addr) => addr,
@@ -92,5 +82,12 @@ impl SocksRequest {
             dest_addr,
             dest_port,
         })
+    }
+
+    async fn read_u8_with_err<R>(reader: &mut BufReader<R>, err_msg: &str) -> io::Result<u8>
+    where
+        R: AsyncRead + Unpin,
+    {
+        reader.read_u8().await.map_err(|_| io::Error::new(io::ErrorKind::UnexpectedEof, err_msg))
     }
 }
