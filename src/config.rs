@@ -1,8 +1,11 @@
-use std::{net::{SocketAddr, ToSocketAddrs}, time::Duration};
+use std::{
+    net::{SocketAddr, ToSocketAddrs},
+    time::Duration,
+};
 
 use clap::Parser;
 
-use crate::connection::Method;
+use crate::connection::method::Method;
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about = "SOCKS5 proxy", long_about = None)]
@@ -43,14 +46,12 @@ pub struct ProxyConfig {
     //     help = "TCP keep-alive timeout in seconds (0 to disable)"
     // )]
     // pub keep_alive: u64,
-
     #[arg(long, help = "Enable detailed connection metrics")]
     pub metrics: bool,
 
     // Not implemented yet
     // #[arg(long, help = "Local address to bind outgoing connections to")]
     // pub bind_addr: Option<String>,
-
     #[arg(
         long,
         default_value = "none",
@@ -73,8 +74,8 @@ impl ProxyConfig {
 
         match addr_str.to_socket_addrs() {
             Ok(mut addrs) => addrs.next().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
                     format!("No addresses found for '{}'", addr_str),
                 )
             }),

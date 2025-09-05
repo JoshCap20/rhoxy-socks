@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::{Method, SOCKS5_VERSION};
+use crate::connection::{method::Method, SOCKS5_VERSION};
 
 #[derive(Debug)]
 pub struct HandshakeRequest {
