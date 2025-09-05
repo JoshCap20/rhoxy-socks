@@ -1,5 +1,5 @@
-pub mod connection;
 pub mod config;
+pub mod connection;
 
 use std::io;
 use std::net::SocketAddr;
@@ -13,13 +13,38 @@ pub async fn handle_connection(
     config: config::ConnectionConfig,
 ) -> io::Result<()> {
     debug!("Handling connection from {}", client_addr);
+
+    if config.tcp_nodelay {
+        // fuck it, we enable nodelay on the client stream also
+        // only really matters in handle_request when connecting to target
+        // which is enabled separately
+        if let Err(e) = stream.set_nodelay(true) {
+            debug!("Failed to set TCP_NODELAY for {}: {}", client_addr, e);
+        }
+    }
+
+    // TODO: Apply keep-alive 
     let (reader, writer) = stream.into_split();
-    let mut reader = BufReader::new(reader);
-    let mut writer = BufWriter::new(writer);
+    let mut reader = BufReader::with_capacity(config.buffer_size, reader);
+    let mut writer = BufWriter::with_capacity(config.buffer_size, writer);
 
-    // might want to propagate errors to here to send error reply
-    connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
-    connection::handler::handle_request(&mut reader, &mut writer, client_addr).await?;
+    let connection_future = async {
+        connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
+        connection::handler::handle_request(&mut reader, &mut writer, client_addr).await?;
+        Ok::<(), io::Error>(())
+    };
 
-    Ok(())
+    match tokio::time::timeout(config.connection_timeout, connection_future).await {
+        Ok(result) => result,
+        Err(_) => {
+            debug!(
+                "Connection {} timed out after {:?}",
+                client_addr, config.connection_timeout
+            );
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("Connection timed out after {:?}", config.connection_timeout),
+            ))
+        }
+    }
 }
