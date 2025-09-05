@@ -7,6 +7,8 @@ pub mod error;
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 
+use crate::connection::error::SocksError;
+
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const RESERVED: u8 = 0x00;
 // Since socks5 still requires dest.addr and port lets use 0.0.0.0:0 for now

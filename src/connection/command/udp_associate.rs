@@ -7,7 +7,7 @@ use crate::connection::{Reply, request::SocksRequest, send_error_reply};
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
-    client_reader: &mut BufReader<R>,
+    _client_reader: &mut BufReader<R>,
     client_writer: &mut BufWriter<W>,
 ) -> io::Result<()>
 where

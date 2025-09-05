@@ -28,18 +28,18 @@ impl SocksRequest {
         let version = reader
             .read_u8()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version"))?;
+            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read version"))?;
 
         let command = reader
             .read_u8()
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command"))?;
+            .map_err(|_e| io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read command"))?;
 
-        let reserved = reader.read_u8().await.map_err(|e| {
+        let reserved = reader.read_u8().await.map_err(|_e| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read reserved byte")
         })?;
 
-        let address_type = reader.read_u8().await.map_err(|e| {
+        let address_type = reader.read_u8().await.map_err(|_e| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "Failed to read address type")
         })?;
 

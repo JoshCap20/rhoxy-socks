@@ -59,7 +59,7 @@ where
 }
 
 async fn handle_client_greeting<W>(
-    handshake_request: &HandshakeRequest,
+    _handshake_request: &HandshakeRequest,
     writer: &mut BufWriter<W>,
 ) -> io::Result<()>
 where
