@@ -228,12 +228,16 @@ impl CommandResult {
     where
         W: AsyncWrite + Unpin,
     {
-        let (addr_type, addr_bytes) = match self.bind_addr {
-            std::net::IpAddr::V4(ipv4) => (AddressType::IPV4, ipv4.octets().to_vec()),
-            std::net::IpAddr::V6(ipv6) => (AddressType::IPV6, ipv6.octets().to_vec()),
-        };
-
-        send_reply(writer, self.reply_code, addr_type, &addr_bytes, self.bind_port).await
+        match self.bind_addr {
+            std::net::IpAddr::V4(ipv4) => {
+                let addr_bytes = ipv4.octets();
+                send_reply(writer, self.reply_code, AddressType::IPV4, &addr_bytes, self.bind_port).await
+            }
+            std::net::IpAddr::V6(ipv6) => {
+                let addr_bytes = ipv6.octets();
+                send_reply(writer, self.reply_code, AddressType::IPV6, &addr_bytes, self.bind_port).await
+            }
+        }
     }
 
     pub fn is_success(&self) -> bool {
