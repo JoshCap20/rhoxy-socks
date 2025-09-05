@@ -82,6 +82,10 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
+    if let Err(e) = target_stream.set_nodelay(true) {
+        debug!("Failed to set TCP_NODELAY: {}", e);
+    }
+
     let (mut target_reader, mut target_writer) = target_stream.into_split();
     let (client_to_target, target_to_client) = join!(
         copy(&mut *client_reader, &mut target_writer),
