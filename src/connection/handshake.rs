@@ -22,7 +22,14 @@ where
 {
     debug!("Performing handshake for client {}", client_addr);
 
-    let handshake_request = parse_client_greeting(reader).await?;
+    let handshake_request = match parse_client_greeting(reader).await {
+        Ok(req) => req,
+        Err(e) => {
+            debug!("Handshake parsing failed for {}: {}", client_addr, e);
+            return Err(e);
+        }
+    };
+    
     debug!(
         "Parsed client greeting for {}: {:?}",
         client_addr, handshake_request
@@ -43,7 +50,7 @@ where
         error!("Invalid SOCKS version: {}", version);
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("Expected SOCKS version {}, got {}", SOCKS5_VERSION, version),
+            "Invalid SOCKS version in handshake"
         ));
     }
     let nmethods = reader.read_u8().await?;
@@ -59,18 +66,29 @@ where
 }
 
 async fn handle_client_greeting<W>(
-    _handshake_request: &HandshakeRequest,
+    handshake_request: &HandshakeRequest,
     writer: &mut BufWriter<W>,
 ) -> io::Result<()>
 where
     W: AsyncWrite + Unpin,
 {
-    // TODO: Implement method negotation and those specific methods
-    let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
-    writer.write_all(&response).await?;
-    writer.flush().await?;
-
-    Ok(())
+    if handshake_request.methods.contains(&Method::NO_AUTHENTICATION_REQUIRED) {
+        let response = [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED];
+        writer.write_all(&response).await?;
+        writer.flush().await?;
+        Ok(())
+    } else {
+        // TODO: Organize similar to command subdirectory for methods and refactor handling
+        error!("Client does not support no-authentication method");
+        let response = [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS];
+        writer.write_all(&response).await?;
+        writer.flush().await?;
+        
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "No acceptable authentication methods",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -104,7 +122,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5"));
+        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
     }
 
     #[tokio::test]
@@ -175,7 +193,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5, got 4"));
+        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
     }
 
     #[tokio::test]
@@ -189,7 +207,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5, got 0"));
+        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
     }
 
     #[tokio::test]
@@ -203,7 +221,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Expected SOCKS version 5, got 6"));
+        assert!(err.to_string().contains("Invalid SOCKS version in handshake"));
     }
 
     #[tokio::test]
@@ -272,17 +290,18 @@ mod tests {
         let (server, mut client) = tokio::io::duplex(1024);
         let mut writer = BufWriter::new(server);
 
-        handle_client_greeting(&request, &mut writer)
-            .await
-            .expect("Should handle unsupported methods");
+        let result = handle_client_greeting(&request, &mut writer).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("No acceptable authentication methods"));
+        
         writer.flush().await.unwrap();
-
         let mut response = [0u8; 2];
         client.read_exact(&mut response).await.unwrap();
-        // Just returns no auth required for now
         assert_eq!(
             response,
-            [SOCKS5_VERSION, Method::NO_AUTHENTICATION_REQUIRED]
+            [SOCKS5_VERSION, Method::NO_ACCEPTABLE_METHODS]
         );
     }
 
