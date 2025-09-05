@@ -15,6 +15,7 @@ pub async fn perform_handshake<R, W>(
     reader: &mut BufReader<R>,
     writer: &mut BufWriter<W>,
     client_addr: SocketAddr,
+    server_methods: &[u8],
 ) -> io::Result<()>
 where
     R: AsyncRead + Unpin,
