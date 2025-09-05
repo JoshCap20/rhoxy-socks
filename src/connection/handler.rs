@@ -11,6 +11,7 @@ pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
     writer: &mut BufWriter<W>,
     client_addr: SocketAddr,
+    tcp_nodelay: bool,
 ) -> io::Result<()>
 where
     R: AsyncRead + Unpin,
@@ -24,7 +25,7 @@ where
         client_addr, client_request
     );
 
-    handle_client_request(client_request, client_addr, reader, writer).await?;
+    handle_client_request(client_request, client_addr, reader, writer, tcp_nodelay).await?;
 
     Ok(())
 }
@@ -34,6 +35,7 @@ async fn handle_client_request<R, W>(
     client_addr: SocketAddr,
     reader: &mut BufReader<R>,
     writer: &mut BufWriter<W>,
+    tcp_nodelay: bool,
 ) -> io::Result<()>
 where
     R: AsyncRead + Unpin,
@@ -66,7 +68,7 @@ where
     // If successful and has a stream (CONNECT command), handle data transfer
     if result.is_success() && result.stream.is_some() {
         let stream = result.stream.unwrap();
-        handle_data_transfer(reader, writer, stream).await?;
+        handle_data_transfer(reader, writer, stream, tcp_nodelay).await?;
     }
 
     Ok(())
@@ -76,13 +78,16 @@ async fn handle_data_transfer<R, W>(
     client_reader: &mut BufReader<R>,
     client_writer: &mut BufWriter<W>,
     target_stream: TcpStream,
+    tcp_nodelay: bool,
 ) -> io::Result<()>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    if let Err(e) = target_stream.set_nodelay(true) {
-        debug!("Failed to set TCP_NODELAY: {}", e);
+    if tcp_nodelay {
+        if let Err(e) = target_stream.set_nodelay(true) {
+            debug!("Failed to set TCP_NODELAY: {}", e);
+        }
     }
 
     let (mut target_reader, mut target_writer) = target_stream.into_split();

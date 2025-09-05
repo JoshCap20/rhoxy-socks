@@ -30,7 +30,7 @@ pub async fn handle_connection(
 
     let connection_future = async {
         connection::handshake::perform_handshake(&mut reader, &mut writer, client_addr).await?;
-        connection::handler::handle_request(&mut reader, &mut writer, client_addr).await?;
+        connection::handler::handle_request(&mut reader, &mut writer, client_addr, config.tcp_nodelay).await?;
         Ok::<(), io::Error>(())
     };
 

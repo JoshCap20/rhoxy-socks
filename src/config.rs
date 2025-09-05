@@ -28,12 +28,14 @@ pub struct ProxyConfig {
     #[arg(long, default_value = "true", help = "Enable TCP_NODELAY for low latency")]
     pub tcp_nodelay: bool,
 
+    // Not implemented yet
     #[arg(long, default_value = "60", help = "TCP keep-alive timeout in seconds (0 to disable)")]
     pub keep_alive: u64,
 
     #[arg(long, help = "Enable detailed connection metrics")]
     pub metrics: bool,
 
+    // Not implemented yet
     #[arg(long, help = "Local address to bind outgoing connections to")]
     pub bind_addr: Option<String>,
 
