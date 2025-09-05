@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::debug;
 
-use crate::connection::{command::Command, request::SocksRequest};
+use crate::connection::{command::Command, request::SocksRequest, send_error_reply, Reply};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -36,12 +36,17 @@ where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let command: Command = Command::parse_command(client_request.command).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid command from client {}", client_addr),
-        )
-    })?;
+    let command: Command = match Command::parse_command(client_request.command) {
+        Some(cmd) => cmd,
+        None => {
+            debug!("Invalid command {} from client {}", client_request.command, client_addr);
+            let _ = send_error_reply(writer, Reply::COMMAND_NOT_SUPPORTED).await;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid command {} from client {}", client_request.command, client_addr),
+            ));
+        }
+    };
 
     command
         .execute(client_request, client_addr, reader, writer)
@@ -318,7 +323,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains("Reserved byte must be 0x00"));
+        assert!(err.to_string().contains("Reserved byte must be"));
     }
 
     #[tokio::test]

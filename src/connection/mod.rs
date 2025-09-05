@@ -7,6 +7,86 @@ use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tracing::error;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum SocksError {
+    InvalidVersion(u8),
+    InvalidReservedByte(u8),
+    UnsupportedAddressType(u8),
+    UnsupportedCommand(u8),
+    EmptyDomainName,
+    InvalidDomainNameEncoding,
+    DnsResolutionFailed,
+    NoAddressesResolved,
+    ConnectionFailed(io::ErrorKind),
+    InvalidData,
+    IoError(io::ErrorKind),
+}
+
+impl SocksError {
+    pub fn to_reply_code(&self) -> u8 {
+        match self {
+            SocksError::InvalidVersion(_) => Reply::GENERAL_FAILURE,
+            SocksError::InvalidReservedByte(_) => Reply::GENERAL_FAILURE,
+            SocksError::UnsupportedAddressType(_) => Reply::ADDRESS_TYPE_NOT_SUPPORTED,
+            SocksError::UnsupportedCommand(_) => Reply::COMMAND_NOT_SUPPORTED,
+            SocksError::EmptyDomainName => Reply::GENERAL_FAILURE,
+            SocksError::InvalidDomainNameEncoding => Reply::GENERAL_FAILURE,
+            SocksError::DnsResolutionFailed => Reply::HOST_UNREACHABLE,
+            SocksError::NoAddressesResolved => Reply::HOST_UNREACHABLE,
+            SocksError::ConnectionFailed(kind) => match kind {
+                io::ErrorKind::ConnectionRefused => Reply::CONNECTION_REFUSED,
+                io::ErrorKind::TimedOut => Reply::HOST_UNREACHABLE,
+                io::ErrorKind::AddrNotAvailable => Reply::HOST_UNREACHABLE,
+                io::ErrorKind::NetworkUnreachable => Reply::NETWORK_UNREACHABLE,
+                io::ErrorKind::PermissionDenied => Reply::CONNECTION_NOT_ALLOWED,
+                _ => Reply::GENERAL_FAILURE,
+            },
+            SocksError::InvalidData => Reply::GENERAL_FAILURE,
+            SocksError::IoError(_) => Reply::GENERAL_FAILURE,
+        }
+    }
+
+    pub fn to_io_error(&self) -> io::Error {
+        match self {
+            SocksError::InvalidVersion(v) => io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid SOCKS version: {}", v),
+            ),
+            SocksError::InvalidReservedByte(b) => io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid reserved byte: {}", b),
+            ),
+            SocksError::UnsupportedAddressType(t) => io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unsupported address type: {}", t),
+            ),
+            SocksError::UnsupportedCommand(c) => io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unsupported command: {}", c),
+            ),
+            SocksError::EmptyDomainName => io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Empty domain name",
+            ),
+            SocksError::InvalidDomainNameEncoding => io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid domain name encoding",
+            ),
+            SocksError::DnsResolutionFailed => io::Error::new(
+                io::ErrorKind::Other,
+                "DNS resolution failed",
+            ),
+            SocksError::NoAddressesResolved => io::Error::new(
+                io::ErrorKind::Other,
+                "No addresses resolved for domain",
+            ),
+            SocksError::ConnectionFailed(kind) => io::Error::new(*kind, "Connection failed"),
+            SocksError::InvalidData => io::Error::new(io::ErrorKind::InvalidData, "Invalid data"),
+            SocksError::IoError(kind) => io::Error::new(*kind, "IO error"),
+        }
+    }
+}
+
 pub const SOCKS5_VERSION: u8 = 0x05;
 pub const RESERVED: u8 = 0x00;
 // Since socks5 still requires dest.addr and port lets use 0.0.0.0:0 for now
@@ -81,21 +161,26 @@ impl AddressType {
         }
     }
 
-    pub async fn parse<R>(reader: &mut BufReader<R>, atyp: u8) -> io::Result<std::net::IpAddr>
+    pub async fn parse<R>(reader: &mut BufReader<R>, atyp: u8) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         match AddressType::from_u8(atyp) {
-            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await,
-            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await,
-            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await,
-            None => {
-                error!("Unsupported address type: {}", atyp);
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Unsupported address type",
-                ))
-            }
+            Some(AddressType::IPv4) => Self::parse_ipv4(reader).await.map_err(|e| SocksError::IoError(e.kind())),
+            Some(AddressType::DomainName) => Self::parse_domain_name(reader).await.map_err(|e| {
+                let error_msg = e.to_string();
+                if error_msg.contains("DNS") || error_msg.contains("resolution") {
+                    SocksError::DnsResolutionFailed(error_msg)
+                } else if error_msg.contains("Empty domain name") {
+                    SocksError::InvalidDomainName("Empty domain name".to_string())
+                } else if error_msg.contains("Invalid domain name encoding") {
+                    SocksError::InvalidDomainName("Invalid encoding".to_string())
+                } else {
+                    SocksError::IoError(e.kind())
+                }
+            }),
+            Some(AddressType::IPv6) => Self::parse_ipv6(reader).await.map_err(|e| SocksError::IoError(e.kind())),
+            None => Err(SocksError::UnsupportedAddressType(atyp))
         }
     }
 
@@ -117,16 +202,13 @@ impl AddressType {
         Ok(std::net::IpAddr::from(addr))
     }
 
-    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> io::Result<std::net::IpAddr>
+    async fn parse_domain_name<R>(reader: &mut BufReader<R>) -> Result<std::net::IpAddr, SocksError>
     where
         R: AsyncRead + Unpin,
     {
         let domain_len = reader.read_u8().await? as usize;
         if domain_len == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Empty domain name",
-            ));
+            return Err(SocksError::InvalidDomainName("Empty domain name".to_string()));
         }
 
         let mut domain = vec![0u8; domain_len];
@@ -180,6 +262,14 @@ where
     writer.write_u16(port).await?;
     writer.flush().await?;
     Ok(())
+}
+
+pub async fn send_socks_error_reply<W>(writer: &mut BufWriter<W>, socks_error: &SocksError) -> io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    let error_code = socks_error.to_reply_code();
+    send_error_reply(writer, error_code).await
 }
 
 pub async fn send_error_reply<W>(writer: &mut BufWriter<W>, error_code: u8) -> io::Result<()>
