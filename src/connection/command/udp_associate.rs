@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
 use tracing::{debug, error};
 
-use crate::connection::{Reply, command::CommandResult, request::SocksRequest};
+use crate::connection::{reply::Reply, command::CommandResult, request::SocksRequest};
 
 pub async fn handle_command<R, W>(
     client_request: SocksRequest,

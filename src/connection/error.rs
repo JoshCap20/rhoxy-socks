@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::connection::Reply;
+use crate::connection::reply::Reply;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SocksError {

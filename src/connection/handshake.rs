@@ -16,7 +16,6 @@ where
 {
     debug!("Performing handshake for client {}", client_addr);
 
-    // Parse client greeting using the method handler
     let client_greeting = match MethodHandler::parse_client_greeting(reader).await {
         Ok(greeting) => greeting,
         Err(e) => {
@@ -30,7 +29,6 @@ where
         client_addr, client_greeting.version, client_greeting.methods
     );
 
-    // Validate the greeting
     if let Err(validation_error) = client_greeting.validate() {
         debug!("Invalid client greeting from {}: {}", client_addr, validation_error);
         return Err(io::Error::new(
@@ -39,7 +37,6 @@ where
         ));
     }
 
-    // Handle method negotiation and authentication
     let _selected_method = MethodHandler::handle_client_methods(
         &client_greeting.methods,
         server_methods,

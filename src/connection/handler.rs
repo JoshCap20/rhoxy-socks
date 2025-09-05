@@ -5,7 +5,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::connection::{Reply, command::Command, request::SocksRequest, send_error_reply};
+use crate::connection::{reply::Reply, command::Command, request::SocksRequest, send_error_reply};
 
 pub async fn handle_request<R, W>(
     reader: &mut BufReader<R>,
@@ -113,7 +113,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::connection::{
-        AddressType, RESERVED, Reply, SOCKS5_VERSION, command::Command, send_reply,
+        AddressType, RESERVED, reply::Reply, SOCKS5_VERSION, command::Command, send_reply,
     };
 
     use super::*;
