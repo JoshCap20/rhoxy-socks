@@ -8,6 +8,23 @@ use crate::{
     handle_connection,
 };
 
+struct ConnectionGuard {
+    counter: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl ConnectionGuard {
+    fn new(counter: Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        Self { counter }
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        let prev_count = self.counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        debug!("Connection finished (active: {})", prev_count - 1);
+    }
+}
+
 pub struct ProxyServer {
     listener: TcpListener,
     config: Arc<ProxyConfig>,
