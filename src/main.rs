@@ -5,7 +5,10 @@ use tokio::signal;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
-use rhoxy_socks::{config::{ConnectionConfig, ProxyConfig}, server::ProxyServer};
+use rhoxy_socks::{
+    config::{ConnectionConfig, ProxyConfig},
+    server::ProxyServer,
+};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {

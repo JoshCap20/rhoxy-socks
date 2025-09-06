@@ -3,8 +3,10 @@ use std::{io, sync::Arc};
 use tokio::{net::TcpListener, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 
-use crate::{config::{ConnectionConfig, ProxyConfig}, handle_connection};
-
+use crate::{
+    config::{ConnectionConfig, ProxyConfig},
+    handle_connection,
+};
 
 pub struct ProxyServer {
     listener: TcpListener,
@@ -15,7 +17,10 @@ pub struct ProxyServer {
 }
 
 impl ProxyServer {
-    pub async fn new(server_addr: std::net::SocketAddr, config: Arc<ProxyConfig>) -> io::Result<Self> {
+    pub async fn new(
+        server_addr: std::net::SocketAddr,
+        config: Arc<ProxyConfig>,
+    ) -> io::Result<Self> {
         info!("Starting server on {}", server_addr);
 
         let listener = match TcpListener::bind(&server_addr).await {
@@ -43,7 +48,10 @@ impl ProxyServer {
     }
 
     pub async fn run(&mut self) -> io::Result<()> {
-        info!("Ready to accept connections (max: {})", self.config.max_connections);
+        info!(
+            "Ready to accept connections (max: {})",
+            self.config.max_connections
+        );
 
         let mut shutdown_rx = self.shutdown_tx.subscribe();
 
@@ -86,19 +94,32 @@ impl ProxyServer {
     }
 
     fn should_reject_connection(&self) -> io::Result<bool> {
-        let new_count = self.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-        
+        let new_count = self
+            .active_connections
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+
         if new_count > self.config.max_connections {
-            self.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            self.active_connections
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(true);
         }
-        
+
         Ok(false)
     }
 
-    async fn spawn_connection_handler(&self, socket: tokio::net::TcpStream, socket_addr: std::net::SocketAddr) {
-        let active_count = self.active_connections.load(std::sync::atomic::Ordering::Relaxed);
-        debug!("Accepted connection from {} (active: {}/{})", socket_addr, active_count, self.config.max_connections);
+    async fn spawn_connection_handler(
+        &self,
+        socket: tokio::net::TcpStream,
+        socket_addr: std::net::SocketAddr,
+    ) {
+        let active_count = self
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed);
+        debug!(
+            "Accepted connection from {} (active: {}/{})",
+            socket_addr, active_count, self.config.max_connections
+        );
 
         let conn_config = self.connection_config.clone();
         let conn_counter = self.active_connections.clone();
@@ -120,11 +141,20 @@ impl ProxyServer {
             match result {
                 Ok(_) => {
                     if conn_config.metrics_enabled {
-                        debug!("Connection {} completed successfully (active: {})", socket_addr, prev_count - 1);
+                        debug!(
+                            "Connection {} completed successfully (active: {})",
+                            socket_addr,
+                            prev_count - 1
+                        );
                     }
                 }
                 Err(e) => {
-                    error!("Connection error for {}: {} (active: {})", socket_addr, e, prev_count - 1);
+                    error!(
+                        "Connection error for {}: {} (active: {})",
+                        socket_addr,
+                        e,
+                        prev_count - 1
+                    );
                 }
             }
         });
@@ -132,7 +162,9 @@ impl ProxyServer {
 
     async fn wait_for_shutdown(&self) {
         let ctrl_c = async {
-            signal::ctrl_c().await.expect("Failed to install Ctrl+C handler");
+            signal::ctrl_c()
+                .await
+                .expect("Failed to install Ctrl+C handler");
         };
 
         #[cfg(unix)]
@@ -157,24 +189,37 @@ impl ProxyServer {
     }
 
     async fn shutdown(&self) {
-        let active_count = self.active_connections.load(std::sync::atomic::Ordering::Relaxed);
-        
+        let active_count = self
+            .active_connections
+            .load(std::sync::atomic::Ordering::Relaxed);
+
         if active_count > 0 {
-            info!("Gracefully shutting down with {} active connections", active_count);
+            info!(
+                "Gracefully shutting down with {} active connections",
+                active_count
+            );
             let _ = self.shutdown_tx.send(());
-            
+
             let shutdown_timeout = tokio::time::Duration::from_secs(30);
             let start = tokio::time::Instant::now();
-            
-            while self.active_connections.load(std::sync::atomic::Ordering::Relaxed) > 0 
-                && start.elapsed() < shutdown_timeout 
+
+            while self
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+                && start.elapsed() < shutdown_timeout
             {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
-            
-            let remaining = self.active_connections.load(std::sync::atomic::Ordering::Relaxed);
+
+            let remaining = self
+                .active_connections
+                .load(std::sync::atomic::Ordering::Relaxed);
             if remaining > 0 {
-                warn!("Shutdown timeout reached, {} connections still active", remaining);
+                warn!(
+                    "Shutdown timeout reached, {} connections still active",
+                    remaining
+                );
             } else {
                 info!("All connections closed gracefully");
             }
