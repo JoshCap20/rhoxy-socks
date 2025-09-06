@@ -8,6 +8,25 @@ use crate::{
     handle_connection,
 };
 
+struct ConnectionGuard {
+    counter: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl ConnectionGuard {
+    fn new(counter: Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        Self { counter }
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        let prev_count = self
+            .counter
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        debug!("Connection finished (active: {})", prev_count - 1);
+    }
+}
+
 pub struct ProxyServer {
     listener: TcpListener,
     config: Arc<ProxyConfig>,
@@ -126,6 +145,8 @@ impl ProxyServer {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
 
         tokio::spawn(async move {
+            let _connection_guard = ConnectionGuard::new(conn_counter.clone());
+
             let result = tokio::select! {
                 result = handle_connection(socket, socket_addr, conn_config.clone()) => {
                     result
@@ -136,23 +157,12 @@ impl ProxyServer {
                 }
             };
 
-            let prev_count = conn_counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-
             match result {
                 Ok(_) => {
-                    debug!(
-                        "Connection {} completed successfully (active: {})",
-                        socket_addr,
-                        prev_count - 1
-                    );
+                    debug!("Connection {} completed successfully", socket_addr);
                 }
                 Err(e) => {
-                    error!(
-                        "Connection error for {}: {} (active: {})",
-                        socket_addr,
-                        e,
-                        prev_count - 1
-                    );
+                    error!("Connection error for {}: {}", socket_addr, e);
                 }
             }
         });
@@ -213,9 +223,10 @@ impl ProxyServer {
                 .load(std::sync::atomic::Ordering::Relaxed);
             if remaining > 0 {
                 warn!(
-                    "Shutdown timeout reached, {} connections still active",
+                    "Shutdown timeout reached, {} connections still active - forcing close",
                     remaining
                 );
+                let _ = self.shutdown_tx.send(());
             } else {
                 info!("All connections closed gracefully");
             }

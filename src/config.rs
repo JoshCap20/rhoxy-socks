@@ -45,7 +45,6 @@ pub struct ProxyConfig {
     )]
     pub tcp_nodelay: bool,
 
-
     #[arg(
         long,
         default_value = "none",

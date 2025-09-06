@@ -132,10 +132,10 @@ mod tests {
     async fn test_parse_ipv4_valid() {
         let data = vec![127, 0, 0, 1];
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::IPV4).await;
         assert!(result.is_ok());
-        
+
         let addr = result.unwrap();
         assert_eq!(addr, std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
     }
@@ -144,10 +144,10 @@ mod tests {
     async fn test_parse_ipv4_incomplete_data() {
         let data = vec![127, 0, 0]; // Missing one byte
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::IPV4).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::IoError(kind)) = result {
             assert_eq!(kind, std::io::ErrorKind::UnexpectedEof);
         } else {
@@ -158,17 +158,22 @@ mod tests {
     #[tokio::test]
     async fn test_parse_ipv6_valid() {
         let data = vec![
-            0x20, 0x01, 0x0d, 0xb8, 0x85, 0xa3, 0x00, 0x00,
-            0x00, 0x00, 0x8a, 0x2e, 0x03, 0x70, 0x73, 0x34
+            0x20, 0x01, 0x0d, 0xb8, 0x85, 0xa3, 0x00, 0x00, 0x00, 0x00, 0x8a, 0x2e, 0x03, 0x70,
+            0x73, 0x34,
         ];
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::IPV6).await;
         assert!(result.is_ok());
-        
+
         let addr = result.unwrap();
         if let std::net::IpAddr::V6(ipv6_addr) = addr {
-            assert_eq!(ipv6_addr.segments(), [0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334]);
+            assert_eq!(
+                ipv6_addr.segments(),
+                [
+                    0x2001, 0x0db8, 0x85a3, 0x0000, 0x0000, 0x8a2e, 0x0370, 0x7334
+                ]
+            );
         } else {
             panic!("Expected IPv6 address");
         }
@@ -178,10 +183,10 @@ mod tests {
     async fn test_parse_ipv6_incomplete_data() {
         let data = vec![0x20, 0x01, 0x0d, 0xb8]; // Only 4 bytes instead of 16
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::IPV6).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::IoError(kind)) = result {
             assert_eq!(kind, std::io::ErrorKind::UnexpectedEof);
         } else {
@@ -193,10 +198,10 @@ mod tests {
     async fn test_parse_domain_name_empty() {
         let data = vec![0]; // Domain length = 0
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::DOMAIN_NAME).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::EmptyDomainName) = result {
             // Expected
         } else {
@@ -208,10 +213,10 @@ mod tests {
     async fn test_parse_domain_name_invalid_utf8() {
         let data = vec![3, 0xFF, 0xFE, 0xFD]; // Invalid UTF-8 sequence
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::DOMAIN_NAME).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::InvalidDomainNameEncoding) = result {
             // Expected
         } else {
@@ -223,10 +228,10 @@ mod tests {
     async fn test_parse_domain_name_incomplete_length() {
         let data = vec![]; // No domain length byte
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::DOMAIN_NAME).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::IoError(kind)) = result {
             assert_eq!(kind, std::io::ErrorKind::UnexpectedEof);
         } else {
@@ -238,10 +243,10 @@ mod tests {
     async fn test_parse_domain_name_incomplete_data() {
         let data = vec![5, b'h', b'e']; // Claims 5 bytes but only provides 2
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, AddressType::DOMAIN_NAME).await;
         assert!(result.is_err());
-        
+
         if let Err(SocksError::IoError(kind)) = result {
             assert_eq!(kind, std::io::ErrorKind::UnexpectedEof);
         } else {
@@ -253,10 +258,10 @@ mod tests {
     async fn test_parse_unsupported_address_type() {
         let data = vec![127, 0, 0, 1];
         let mut reader = BufReader::new(data.as_slice());
-        
+
         let result = AddressType::parse(&mut reader, 0x99).await; // Invalid ATYP
         assert!(result.is_err());
-        
+
         if let Err(SocksError::UnsupportedAddressType(atyp)) = result {
             assert_eq!(atyp, 0x99);
         } else {

@@ -1,6 +1,6 @@
 use std::{io, net::SocketAddr};
 use tokio::{
-    io::{copy, AsyncRead, AsyncWrite, BufReader, BufWriter},
+    io::{AsyncRead, AsyncWrite, BufReader, BufWriter, copy},
     net::TcpStream,
 };
 use tracing::debug;

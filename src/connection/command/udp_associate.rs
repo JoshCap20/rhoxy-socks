@@ -22,3 +22,99 @@ where
     error!("[{client_addr}] UDP ASSOCIATE command is not supported");
     Ok(CommandResult::error(Reply::COMMAND_NOT_SUPPORTED))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::{AddressType, command::Command};
+    use std::net::{IpAddr, Ipv4Addr};
+    use tokio::io::BufReader;
+
+    fn create_test_request() -> SocksRequest {
+        SocksRequest {
+            version: 0x05,
+            command: Command::UDP_ASSOCIATE as u8,
+            reserved: 0x00,
+            address_type: AddressType::IPV4,
+            dest_addr: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            dest_port: 8080,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_udp_associate_command_not_supported() {
+        let request = create_test_request();
+        let client_addr = "127.0.0.1:12345".parse().unwrap();
+
+        let (client_read, _client_write) = tokio::io::duplex(1024);
+        let mut reader = BufReader::new(client_read);
+        let mut writer = tokio::io::BufWriter::new(tokio::io::sink());
+
+        let result = handle_command(request, client_addr, &mut reader, &mut writer).await;
+
+        assert!(result.is_ok());
+        let command_result = result.unwrap();
+        assert!(command_result.is_error());
+        assert_eq!(command_result.reply_code(), Reply::COMMAND_NOT_SUPPORTED);
+    }
+
+    #[tokio::test]
+    async fn test_udp_associate_with_different_address_types() {
+        let test_cases = [
+            (AddressType::IPv4, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))),
+            (
+                AddressType::IPv6,
+                IpAddr::V6("2001:db8::1".parse().unwrap()),
+            ),
+        ];
+
+        for (addr_type, dest_addr) in test_cases {
+            let mut request = create_test_request();
+            request.address_type = addr_type as u8;
+            request.dest_addr = dest_addr;
+
+            let client_addr = "127.0.0.1:12345".parse().unwrap();
+
+            let (client_read, _client_write) = tokio::io::duplex(1024);
+            let mut reader = BufReader::new(client_read);
+            let mut writer = tokio::io::BufWriter::new(tokio::io::sink());
+
+            let result = handle_command(request, client_addr, &mut reader, &mut writer).await;
+
+            assert!(result.is_ok());
+            let command_result = result.unwrap();
+            assert!(command_result.is_error());
+            assert_eq!(command_result.reply_code(), Reply::COMMAND_NOT_SUPPORTED);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_udp_associate_with_different_ports() {
+        let test_ports = [53, 67, 123, 1194, 65535];
+
+        for port in test_ports {
+            let mut request = create_test_request();
+            request.dest_port = port;
+
+            let client_addr = "127.0.0.1:12345".parse().unwrap();
+
+            let (client_read, _client_write) = tokio::io::duplex(1024);
+            let mut reader = BufReader::new(client_read);
+            let mut writer = tokio::io::BufWriter::new(tokio::io::sink());
+
+            let result = handle_command(request, client_addr, &mut reader, &mut writer).await;
+
+            assert!(result.is_ok());
+            let command_result = result.unwrap();
+            assert!(command_result.is_error());
+            assert_eq!(command_result.reply_code(), Reply::COMMAND_NOT_SUPPORTED);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_udp_associate_command_enum_value() {
+        let request = create_test_request();
+        assert_eq!(request.command, Command::UDP_ASSOCIATE as u8);
+        assert_eq!(request.command, 0x03);
+    }
+}
