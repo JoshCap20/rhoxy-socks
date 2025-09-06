@@ -1,14 +1,8 @@
 use std::io;
 use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::error;
 
-use rhoxy_socks::{
-    config::{ConnectionConfig, ProxyConfig},
-    server::ProxyServer,
-};
+use rhoxy_socks::{config::ProxyConfig, server::ProxyServer};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
