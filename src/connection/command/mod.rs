@@ -137,6 +137,14 @@ impl CommandResult {
     pub fn is_success(&self) -> bool {
         self.reply_code == Reply::SUCCESS
     }
+
+    pub fn is_error(&self) -> bool {
+        !self.is_success()
+    }
+
+    pub fn reply_code(&self) -> u8 {
+        self.reply_code
+    }
 }
 
 #[cfg(test)]
