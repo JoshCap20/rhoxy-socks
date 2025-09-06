@@ -197,16 +197,13 @@ impl ProxyServer {
                 active_count
             );
             let _ = self.shutdown_tx.send(());
-
-            // TODO: Move shutdown timeout to env var
-            let shutdown_timeout = tokio::time::Duration::from_secs(10);
             let start = tokio::time::Instant::now();
 
             while self
                 .active_connections
                 .load(std::sync::atomic::Ordering::Relaxed)
                 > 0
-                && start.elapsed() < shutdown_timeout
+                && start.elapsed() < self.connection_config.shutdown_timeout
             {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }

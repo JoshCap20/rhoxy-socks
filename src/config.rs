@@ -28,6 +28,9 @@ pub struct ProxyConfig {
     #[arg(long, default_value = "60", help = "Connection timeout in seconds")]
     pub connection_timeout: u64,
 
+    #[arg(long, default_value = "10", help = "Shutdown timeout in seconds")]
+    pub shutdown_timeout: u64,
+
     #[arg(
         long,
         default_value = "32",
@@ -150,6 +153,7 @@ impl ProxyConfig {
 pub struct ConnectionConfig {
     pub buffer_size: usize,
     pub tcp_nodelay: bool,
+    pub shutdown_timeout: Duration,
     pub handshake_timeout: Duration,
     pub connection_timeout: Duration,
     pub supported_auth_methods: Vec<u8>,
@@ -160,6 +164,7 @@ impl From<&ProxyConfig> for ConnectionConfig {
         Self {
             buffer_size: config.buffer_size_bytes(),
             tcp_nodelay: config.tcp_nodelay,
+            shutdown_timeout: Duration::from_secs(config.shutdown_timeout),
             handshake_timeout: Duration::from_secs(config.handshake_timeout),
             connection_timeout: Duration::from_secs(config.connection_timeout),
             supported_auth_methods: config.supported_auth_methods(),
@@ -178,6 +183,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            shutdown_timeout: 10,
             handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
@@ -195,6 +201,7 @@ mod tests {
             port: 0,
             verbose: false,
             max_connections: 1000,
+            shutdown_timeout: 10,
             handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
@@ -212,6 +219,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            shutdown_timeout: 10,
             handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
@@ -230,6 +238,7 @@ mod tests {
             port: 1080,
             verbose: false,
             max_connections: 1000,
+            shutdown_timeout: 10,
             handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
@@ -250,6 +259,7 @@ mod tests {
             port: 8080,
             verbose: false,
             max_connections: 1000,
+            shutdown_timeout: 10,
             handshake_timeout: 30,
             connection_timeout: 30,
             buffer_size: 32,
