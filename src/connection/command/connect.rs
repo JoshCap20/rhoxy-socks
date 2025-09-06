@@ -12,7 +12,8 @@ pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     _client_reader: &mut BufReader<R>,
-    _client_writer: &mut BufWriter<W>,
+    client_writer: &mut BufWriter<W>,
+    tcp_nodelay: bool,
 ) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
@@ -33,7 +34,9 @@ where
                 );
 
                 let socks_error = SocksError::ConnectionFailed(e.kind());
-                return Ok(CommandResult::from_socks_error(&socks_error));
+                let error_result = CommandResult::from_socks_error(&socks_error);
+                error_result.send_reply(client_writer).await?;
+                return Ok(error_result);
             }
         };
     debug!(
@@ -44,8 +47,12 @@ where
     let destination_addr = target_stream.local_addr()?;
     let destination_port = destination_addr.port();
 
-    let mut result = CommandResult::success(destination_addr.ip(), destination_port);
-    result.stream = Some(target_stream);
+    let result = CommandResult::success(destination_addr.ip(), destination_port);
+
+    result.send_reply(client_writer).await?;
+
+    handle_data_transfer(_client_reader, client_writer, target_stream, tcp_nodelay).await?;
+
     Ok(result)
 }
 

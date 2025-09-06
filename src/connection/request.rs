@@ -55,16 +55,9 @@ impl SocksRequest {
         };
 
         let result = command
-            .execute(client_request, client_addr, reader, writer)
+            .execute(client_request, client_addr, reader, writer, tcp_nodelay)
             .await?;
-
-        result.send_reply(writer).await?;
-
-        // If successful and has a stream (CONNECT command), handle data transfer
-        if result.is_success() && result.stream.is_some() {
-            let stream = result.stream.unwrap();
-            handle_data_transfer(reader, writer, stream, tcp_nodelay).await?;
-        }
+        debug!("Command execution result for {}: {:?}", client_addr, result);
 
         Ok(())
     }
