@@ -228,9 +228,10 @@ impl ProxyServer {
                 .load(std::sync::atomic::Ordering::Relaxed);
             if remaining > 0 {
                 warn!(
-                    "Shutdown timeout reached, {} connections still active",
+                    "Shutdown timeout reached, {} connections still active - forcing close",
                     remaining
                 );
+                let _ = self.shutdown_tx.send(());
             } else {
                 info!("All connections closed gracefully");
             }
