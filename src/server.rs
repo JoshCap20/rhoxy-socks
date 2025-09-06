@@ -140,13 +140,11 @@ impl ProxyServer {
 
             match result {
                 Ok(_) => {
-                    if conn_config.metrics_enabled {
-                        debug!(
-                            "Connection {} completed successfully (active: {})",
-                            socket_addr,
-                            prev_count - 1
-                        );
-                    }
+                    debug!(
+                        "Connection {} completed successfully (active: {})",
+                        socket_addr,
+                        prev_count - 1
+                    );
                 }
                 Err(e) => {
                     error!(
@@ -200,7 +198,8 @@ impl ProxyServer {
             );
             let _ = self.shutdown_tx.send(());
 
-            let shutdown_timeout = tokio::time::Duration::from_secs(30);
+            // TODO: Move shutdown timeout to env var
+            let shutdown_timeout = tokio::time::Duration::from_secs(10);
             let start = tokio::time::Instant::now();
 
             while self

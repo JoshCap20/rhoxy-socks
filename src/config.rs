@@ -42,8 +42,6 @@ pub struct ProxyConfig {
     )]
     pub tcp_nodelay: bool,
 
-    #[arg(long, help = "Enable detailed connection metrics")]
-    pub metrics: bool,
 
     #[arg(
         long,
@@ -144,7 +142,6 @@ impl ProxyConfig {
         println!("   Buffer Size:         {}KB", self.buffer_size);
         println!("   TCP_NODELAY:         {}", self.tcp_nodelay);
         println!("   Auth Methods:        {}", self.auth_methods);
-        println!("   Metrics Enabled:     {}", self.metrics);
         println!("   Debug Logging:       {}", self.verbose);
     }
 }
@@ -155,7 +152,6 @@ pub struct ConnectionConfig {
     pub tcp_nodelay: bool,
     pub handshake_timeout: Duration,
     pub connection_timeout: Duration,
-    pub metrics_enabled: bool,
     pub supported_auth_methods: Vec<u8>,
 }
 
@@ -166,7 +162,6 @@ impl From<&ProxyConfig> for ConnectionConfig {
             tcp_nodelay: config.tcp_nodelay,
             handshake_timeout: Duration::from_secs(config.handshake_timeout),
             connection_timeout: Duration::from_secs(config.connection_timeout),
-            metrics_enabled: config.metrics,
             supported_auth_methods: config.supported_auth_methods(),
         }
     }
@@ -187,7 +182,6 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            metrics: false,
             auth_methods: "none".to_string(),
         };
 
@@ -205,7 +199,6 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            metrics: false,
             auth_methods: "none".to_string(),
         };
 
@@ -223,7 +216,6 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            metrics: false,
             auth_methods: "none".to_string(),
         };
 
@@ -242,7 +234,6 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            metrics: false,
             auth_methods: "none".to_string(),
         };
 
@@ -263,7 +254,6 @@ mod tests {
             connection_timeout: 30,
             buffer_size: 32,
             tcp_nodelay: true,
-            metrics: false,
             auth_methods: "none".to_string(),
         };
 
