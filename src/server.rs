@@ -143,6 +143,8 @@ impl ProxyServer {
         let mut shutdown_rx = self.shutdown_tx.subscribe();
 
         tokio::spawn(async move {
+            let _connection_guard = ConnectionGuard::new(conn_counter.clone());
+            
             let result = tokio::select! {
                 result = handle_connection(socket, socket_addr, conn_config.clone()) => {
                     result
@@ -153,22 +155,18 @@ impl ProxyServer {
                 }
             };
 
-            let prev_count = conn_counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-
             match result {
                 Ok(_) => {
                     debug!(
-                        "Connection {} completed successfully (active: {})",
-                        socket_addr,
-                        prev_count - 1
+                        "Connection {} completed successfully",
+                        socket_addr
                     );
                 }
                 Err(e) => {
                     error!(
-                        "Connection error for {}: {} (active: {})",
+                        "Connection error for {}: {}",
                         socket_addr,
-                        e,
-                        prev_count - 1
+                        e
                     );
                 }
             }
