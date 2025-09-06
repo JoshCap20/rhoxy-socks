@@ -20,7 +20,9 @@ impl ConnectionGuard {
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        let prev_count = self.counter.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        let prev_count = self
+            .counter
+            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         debug!("Connection finished (active: {})", prev_count - 1);
     }
 }
@@ -144,7 +146,7 @@ impl ProxyServer {
 
         tokio::spawn(async move {
             let _connection_guard = ConnectionGuard::new(conn_counter.clone());
-            
+
             let result = tokio::select! {
                 result = handle_connection(socket, socket_addr, conn_config.clone()) => {
                     result
@@ -157,17 +159,10 @@ impl ProxyServer {
 
             match result {
                 Ok(_) => {
-                    debug!(
-                        "Connection {} completed successfully",
-                        socket_addr
-                    );
+                    debug!("Connection {} completed successfully", socket_addr);
                 }
                 Err(e) => {
-                    error!(
-                        "Connection error for {}: {}",
-                        socket_addr,
-                        e
-                    );
+                    error!("Connection error for {}: {}", socket_addr, e);
                 }
             }
         });

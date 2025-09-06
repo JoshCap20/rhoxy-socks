@@ -1,4 +1,3 @@
-
 use rhoxy_socks::config::ConnectionConfig;
 use rhoxy_socks::connection::method::method::Method;
 use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection};
@@ -38,7 +37,9 @@ async fn test_full_socks5_connect_ipv4() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        handle_connection(socket, client_addr, default_test_config()).await.unwrap();
+        handle_connection(socket, client_addr, default_test_config())
+            .await
+            .unwrap();
     });
 
     // Client: Connect to SOCKS, do handshake
@@ -97,7 +98,9 @@ async fn test_full_socks5_connect_ipv6() {
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
         let (socket, client_addr) = socks_listener.accept().await.unwrap();
-        handle_connection(socket, client_addr, default_test_config()).await.unwrap();
+        handle_connection(socket, client_addr, default_test_config())
+            .await
+            .unwrap();
     });
 
     // Client: Connect to SOCKS, do handshake
