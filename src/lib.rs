@@ -1,5 +1,6 @@
 pub mod config;
 pub mod connection;
+pub mod server;
 
 use std::io;
 use std::net::SocketAddr;
@@ -9,7 +10,7 @@ use tokio::time::timeout;
 use tracing::debug;
 
 pub async fn handle_connection(
-    mut stream: TcpStream,
+    stream: TcpStream,
     client_addr: SocketAddr,
     config: config::ConnectionConfig,
 ) -> io::Result<()> {

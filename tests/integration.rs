@@ -1,6 +1,7 @@
 
+use rhoxy_socks::config::ConnectionConfig;
 use rhoxy_socks::connection::method::method::Method;
-use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection, config::ConnectionConfig};
+use rhoxy_socks::{connection::SOCKS5_VERSION, handle_connection};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,10 +13,8 @@ fn default_test_config() -> ConnectionConfig {
     ConnectionConfig {
         buffer_size: 32 * 1024,
         tcp_nodelay: true,
-        keep_alive: Some(std::time::Duration::from_secs(60)),
+        shutdown_timeout: std::time::Duration::from_secs(10),
         connection_timeout: std::time::Duration::from_secs(30),
-        bind_addr: None,
-        metrics_enabled: false,
         supported_auth_methods: vec![Method::NO_AUTHENTICATION_REQUIRED],
         handshake_timeout: std::time::Duration::from_secs(30),
     }
