@@ -128,6 +128,10 @@ impl ProxyConfig {
             return Err("Buffer size cannot exceed 1024 KB".to_string());
         }
 
+        if self.shutdown_timeout <= 0 {
+            return Err("Shutdown timeout must be greater than 0".to_string());
+        }
+
         let methods = self.supported_auth_methods();
         if methods.is_empty() {
             return Err("At least one authentication method must be supported".to_string());
