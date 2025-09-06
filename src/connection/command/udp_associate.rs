@@ -8,7 +8,7 @@ pub async fn handle_command<R, W>(
     client_request: SocksRequest,
     client_addr: SocketAddr,
     _client_reader: &mut BufReader<R>,
-    _client_writer: &mut BufWriter<W>,
+    client_writer: &mut BufWriter<W>,
 ) -> io::Result<CommandResult>
 where
     R: AsyncRead + Unpin,
@@ -20,7 +20,9 @@ where
     );
 
     error!("[{client_addr}] UDP ASSOCIATE command is not supported");
-    Ok(CommandResult::error(Reply::COMMAND_NOT_SUPPORTED))
+    let error_result = CommandResult::error(Reply::COMMAND_NOT_SUPPORTED);
+    error_result.send_reply(client_writer).await?;
+    Ok(error_result)
 }
 
 #[cfg(test)]

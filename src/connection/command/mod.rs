@@ -29,6 +29,7 @@ impl Command {
         client_addr: SocketAddr,
         client_reader: &mut BufReader<R>,
         client_writer: &mut BufWriter<W>,
+        tcp_nodelay: bool,
     ) -> io::Result<CommandResult>
     where
         R: AsyncRead + Unpin,
@@ -36,8 +37,14 @@ impl Command {
     {
         match self {
             Command::Connect => {
-                connect::handle_command(client_request, client_addr, client_reader, client_writer)
-                    .await
+                connect::handle_command(
+                    client_request,
+                    client_addr,
+                    client_reader,
+                    client_writer,
+                    tcp_nodelay,
+                )
+                .await
             }
             Command::Bind => {
                 bind::handle_command(client_request, client_addr, client_reader, client_writer)
@@ -77,8 +84,7 @@ impl Command {
 pub struct CommandResult {
     pub reply_code: u8,
     pub bind_addr: std::net::IpAddr,
-    pub bind_port: u16,
-    pub stream: Option<tokio::net::TcpStream>,
+    pub bind_port: u16
 }
 
 impl CommandResult {
@@ -86,8 +92,7 @@ impl CommandResult {
         Self {
             reply_code: Reply::SUCCESS,
             bind_addr,
-            bind_port,
-            stream: None,
+            bind_port
         }
     }
 
@@ -96,7 +101,6 @@ impl CommandResult {
             reply_code,
             bind_addr: std::net::IpAddr::from(ERROR_ADDR),
             bind_port: ERROR_PORT,
-            stream: None,
         }
     }
 
