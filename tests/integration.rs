@@ -296,7 +296,7 @@ async fn test_client_disconnect_during_handshake() {
 }
 
 #[tokio::test]
-async fn test_unsupported_bind_command() {
+async fn test_bind_command_first_reply() {
     let socks_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let socks_addr = socks_listener.local_addr().unwrap();
     let socks_handle = task::spawn(async move {
@@ -313,30 +313,37 @@ async fn test_unsupported_bind_command() {
     client.read_exact(&mut response).await.unwrap();
     assert_eq!(response, [SOCKS5_VERSION, 0x00]);
 
-    // BIND request (unsupported)
+    // BIND request (now supported)
     let mut request = vec![0x05, 0x02, 0x00, 0x01]; // BIND command
     request.extend_from_slice(&[127, 0, 0, 1]);
     request.extend_from_slice(&8080u16.to_be_bytes());
     client.write_all(&request).await.unwrap();
     client.flush().await.unwrap();
 
-    // Should get connection closed or error reply
-    let mut reply = vec![0u8; 10];
-    let result = timeout(Duration::from_secs(2), client.read_exact(&mut reply)).await;
+    // Should get first reply with success and bound address/port
+    let mut first_reply = vec![0u8; 10];
+    let result = timeout(Duration::from_secs(2), client.read_exact(&mut first_reply)).await;
 
     match result {
         Ok(Ok(_)) => {
-            // Got a reply - should be an error code
-            assert_eq!(reply[0], SOCKS5_VERSION);
-            assert_ne!(reply[1], 0x00); // Should not be success
+            // Got first reply - should be success
+            assert_eq!(first_reply[0], SOCKS5_VERSION);
+            assert_eq!(first_reply[1], 0x00); // Should be success
+            assert_eq!(first_reply[2], 0x00); // Reserved
+            assert_eq!(first_reply[3], 0x01); // IPv4 address type
+
+            // Extract the bound port (bytes 8-9)
+            let bound_port = u16::from_be_bytes([first_reply[8], first_reply[9]]);
+            assert!(bound_port > 0); // Should have a valid port
         }
         _ => {
-            // Connection closed, which is acceptable for unsupported commands
+            panic!("Expected to receive first BIND reply");
         }
     }
 
+    // Don't wait for second reply as we won't connect to the bound socket
     drop(client);
-    let _ = socks_handle.await;
+    socks_handle.abort(); // Cancel the task instead of waiting
 }
 
 #[tokio::test]
